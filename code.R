@@ -6,8 +6,8 @@ g1 <- rCharts$new()
 g1$setLib(path)
 g1$set(
   spec = list(
-    layers = c(
-      list( geom= "rect", stat= "bin", aes= list( group= list(opacity= 0.5, color= "name")) ),
+    layers = list(
+      list(geom= "rect", stat= "bin", aes = list( group= list(opacity= 0.5, color= "name")) ) ,
       list( geom= "line", aes= list(group= list(color= "black"), stat= "loess", scales= list(color= "identity")))
     ),
     aes = list( x= "{new Date(x)}", y = "{+y}" ),
@@ -20,7 +20,14 @@ g1$set(
           y = i*10,
           name = "sample name"
         ))
-      })
+      }
+    ),
+    opts = list(
+      width = 900,
+      height = 700,
+      title = "Custom plot",
+      minimal = TRUE
+    )
   )
 )
 g1

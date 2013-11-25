@@ -7904,7 +7904,7 @@ science_stats_distribution_gaussianConstant = 1 / Math.sqrt(2 * Math.PI);
 var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{},'pane':{},'wrap':{}},'geom':{'reparam':{},'svg':{}},'layer':{},'pos':{},'prov':{},'scale':{'train':{}},'stat':{},'util':{},'wf':{'rpc':{},'rule':{}},'xform':{}};
 
 (function() {
-  var async, events, exports, findGood, findGoodAttr, fromSpec, io, pg, renderArray, science, timer, _,
+  var async, events, exports, findGood, findGoodAttr, fromSpec, io, pg, renderArray, science, _,
     __slice = [].slice,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __hasProp = {}.hasOwnProperty,
@@ -8112,241 +8112,403 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Schema.date = 3;
 
-    Schema.object = 4;
+    Schema.array = 4;
 
-    Schema.svg = 5;
-
-    Schema.container = 6;
-
-    Schema["function"] = 7;
+    Schema.nested = 5;
 
     Schema.unknown = -1;
 
-    function Schema(cols, types, defaults) {
-      var _this = this;
-      this.cols = cols != null ? cols : [];
-      this.types = types != null ? types : [];
-      this.defaults = defaults != null ? defaults : {};
-      if (this.cols.length !== this.types.length) {
-        throw Error("len of cols != types " + this.cols.length + " != " + this.types.length);
-      }
+    function Schema() {
+      this.lookup = {};
+      this.attrToKeys = {};
       this.log = gg.data.Schema.log;
-      this.col2idx = {};
-      _.each(this.cols, function(col, idx) {
-        return _this.col2idx[col] = idx;
-      });
     }
 
-    Schema.prototype.ncols = function() {
-      return this.cols.length;
-    };
-
-    Schema.prototype.index = function(col) {
-      return this.col2idx[col];
-    };
-
-    Schema.prototype.isOrdinal = function(col) {
-      return this.type(col) === gg.data.Schema.ordinal;
-    };
-
-    Schema.prototype.isNumeric = function(col) {
-      return this.type(col) === gg.data.Schema.numeric;
-    };
-
-    Schema.prototype.isDate = function(col) {
-      return this.type(col) === gg.data.Schema.date;
-    };
-
-    Schema.prototype.isObject = function(col) {
-      return this.type(col) === gg.data.Schema.object;
-    };
-
-    Schema.prototype.isUnknown = function(col) {
-      return this.type(col) === gg.data.Schema.unknown;
-    };
-
-    Schema.prototype["default"] = function(col) {
-      return this.defaults[col];
-    };
-
-    Schema.prototype.addColumn = function(col, type) {
-      if (type == null) {
-        type = gg.data.Schema.unknown;
+    Schema.prototype.addColumn = function(key, type, schema) {
+      var _this = this;
+      if (schema == null) {
+        schema = null;
       }
-      if (!this.has(col)) {
-        this.cols.push(col);
-        this.types.push(type);
-        this.col2idx[col] = this.cols.length - 1;
-        return true;
-      } else {
-        return false;
+      this.lookup[key] = {
+        type: type,
+        schema: schema
+      };
+      this.attrToKeys[key] = key;
+      if (type === gg.data.Schema.array || type === gg.data.Schema.nested) {
+        return _.each(schema.attrs(), function(attr) {
+          return _this.attrToKeys[attr] = key;
+        });
       }
     };
 
-    Schema.prototype.setType = function(col, type) {
-      if (type === this.type(col)) {
-        return;
-      }
-      if (this.type(col) === gg.data.Schema.unknown) {
-        return this.types[this.index(col)] = type;
-      } else {
-        throw Error("can't update " + col + " because type not unknown: " + (this.type(col)));
-      }
-    };
-
-    Schema.prototype.project = function(cols) {
-      var types,
+    Schema.prototype.rmColumn = function(col) {
+      var key,
         _this = this;
-      cols = _.compact(_.flatten([cols]));
-      types = _.map(cols, function(col) {
-        if (!_this.has(col)) {
-          throw Error("col " + col + " not in schema");
-        }
-        return _this.types[_this.index(col)];
-      });
-      return new gg.data.Schema(cols, types);
-    };
-
-    Schema.prototype.exclude = function(rm) {
-      var col, cols, idxs, types, _i, _len, _ref, _ref1,
-        _this = this;
-      rm = _.flatten([rm]);
-      idxs = _.map(rm, function(col) {
-        return _this.index(col);
-      });
-      cols = [];
-      types = [];
-      _ref = this.cols;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        if (_ref1 = this.index(col), __indexOf.call(idxs, _ref1) < 0) {
-          cols.push(col);
-          types.push(this.type(col));
-        }
-      }
-      return new gg.data.Schema(cols, types);
-    };
-
-    Schema.prototype.type = function(col) {
-      return this.types[this.index(col)];
-    };
-
-    Schema.prototype.contains = function(col, type) {
-      if (type == null) {
-        type = null;
-      }
-      return this.has(col, type);
-    };
-
-    Schema.prototype.has = function(col, type) {
-      var idx;
-      if (type == null) {
-        type = null;
-      }
-      if (type != null) {
-        idx = this.index(col);
-        return (col in this.col2idx) && this.types[idx] === type;
-      } else {
-        return col in this.col2idx;
-      }
-    };
-
-    Schema.prototype.merge = function(other) {
-      var col, _i, _len, _ref;
-      if (!_.isType(other, gg.data.Schema)) {
-        return;
-      }
-      _ref = other.cols;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        if (!this.has(col)) {
-          this.addColumn(col, other.type(col));
-        }
-      }
-      return this;
-    };
-
-    Schema.merge = function(schemas) {
-      var col, curschema, schema, type, _i, _j, _len, _len1, _ref, _ref1;
-      schemas = _.flatten(arguments);
-      schema = null;
-      for (_i = 0, _len = schemas.length; _i < _len; _i++) {
-        curschema = schemas[_i];
-        if (schema == null) {
-          schema = curschema.clone();
+      if (this.contains(col)) {
+        key = this.attrToKeys[col];
+        if (key === col) {
+          if (this.isArray(col) || this.isNested(col)) {
+            _.each(this.lookup[key].schema.attrs(), function(attr) {
+              return delete _this.attrToKeys[attr];
+            });
+          }
+          delete this.lookup[key];
         } else {
-          _ref = _.zip(curschema.cols, curschema.types);
-          for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-            _ref1 = _ref[_j], col = _ref1[0], type = _ref1[1];
-            schema.addColumn(col, type);
+          this.lookup[key].schema.rmColumn(col);
+          if (this.lookup[key].schema.nkeys() === 0) {
+            delete this.lookup[key];
           }
         }
-      }
-      return schema;
-    };
-
-    Schema.type = function(v) {
-      if (_.isDate(v)) {
-        return gg.data.Schema.date;
-      } else if (_.isObject(v)) {
-        return gg.data.Schema.object;
-      } else if (_.isNumber(v)) {
-        return gg.data.Schema.numeric;
-      } else {
-        return gg.data.Schema.ordinal;
+        return delete this.attrToKeys[col];
       }
     };
 
-    Schema.infer = function(rows) {
-      var k, row, schema, v, _i, _len, _ref;
+    Schema.prototype.flatten = function(cols, recursive) {
+      var schema,
+        _this = this;
+      if (cols == null) {
+        cols = null;
+      }
+      if (recursive == null) {
+        recursive = false;
+      }
+      if (cols == null) {
+        cols = this.attrs().filter(function(attr) {
+          return _this.isArray(attr) || _this.isNested(attr);
+        });
+      }
+      if (!_.isArray(cols)) {
+        cols = [cols];
+      }
       schema = new gg.data.Schema;
-      if (!((rows != null) && rows.length > 0)) {
-        return schema;
-      }
-      _ref = rows.slice(0, 50);
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        row = _ref[_i];
-        if (_.isType(row, gg.data.Row)) {
-          schema.merge(row.schema);
-        } else {
-          for (k in row) {
-            v = row[k];
-            schema.addColumn(k, this.type(v));
+      _.each(this.lookup, function(type, key) {
+        var arrSchema;
+        if (__indexOf.call(cols, key) >= 0) {
+          if (!recursive && type.type === gg.data.Schema.array) {
+            arrSchema = type.schema;
+            return schema.addColumn(key, gg.data.Schema.nested, arrSchema);
+          } else {
+            if (recursive || type.type === gg.data.Schema.nested) {
+              return _.each(type.schema.lookup, function(subtype, subkey) {
+                return schema.addColumn(subkey, subtype.type, subtype.schema);
+              });
+            } else {
+              return schema.addColumn(key, type.type, type.schema);
+            }
           }
+        } else {
+          return schema.addColumn(key, type.type, type.schema);
+        }
+      });
+      if (false) {
+        switch (type.type) {
+          case gg.data.Schema.array:
+          case gg.data.Schema.nested:
+            _.each(type.schema.lookup, function(subtype, subkey) {
+              return schema.addColumn(subkey, subtype.type, subtype.schema);
+            });
+            break;
+          default:
+            schema.addColumn(key, type.type, type.schema);
         }
       }
       return schema;
     };
 
     Schema.prototype.clone = function() {
-      return this.project(_.clone(this.cols));
+      return gg.data.Schema.fromSpec(this.toJSON());
+    };
+
+    Schema.prototype.attrs = function() {
+      return _.keys(this.attrToKeys);
+    };
+
+    Schema.prototype.leafAttrs = function() {
+      var _this = this;
+      return _.filter(this.attrs(), function(attr) {
+        return _this.isRaw(attr) || _this.inArray(attr) || _this.inNested(attr);
+      });
+    };
+
+    Schema.prototype.contains = function(attr, type) {
+      if (type == null) {
+        type = null;
+      }
+      if (__indexOf.call(this.attrs(), attr) >= 0) {
+        return (type === null) || this.isType(attr, type);
+      } else {
+        return false;
+      }
+    };
+
+    Schema.prototype.nkeys = function() {
+      return _.size(this.lookup);
     };
 
     Schema.prototype.toString = function() {
-      return JSON.stringify(_.zip(this.cols, this.types));
+      return JSON.stringify(this.toJSON());
     };
 
     Schema.prototype.toSimpleString = function() {
-      return _.map(_.zip(this.cols, this.types), function(_arg) {
-        var col, type;
-        col = _arg[0], type = _arg[1];
-        return "" + col + "(" + type + ")";
-      }).join(" ");
+      var arr,
+        _this = this;
+      arr = _.map(this.attrs(), function(attr) {
+        return "" + attr + "(" + (_this.type(attr)) + ")";
+      });
+      return arr.join(" ");
+    };
+
+    Schema.prototype.type = function(attr, schema) {
+      var typeObj;
+      if (schema == null) {
+        schema = null;
+      }
+      typeObj = this.typeObj(attr, schema);
+      if (typeObj == null) {
+        return null;
+      }
+      return typeObj.type;
+    };
+
+    Schema.prototype.typeObj = function(attr, schema) {
+      var json, key, lookup, subLookup, subSchema, type;
+      if (schema == null) {
+        schema = null;
+      }
+      if (schema == null) {
+        schema = this;
+      }
+      lookup = schema.lookup;
+      key = schema.attrToKeys[attr];
+      if (lookup[key] != null) {
+        if (key === attr) {
+          if (lookup[key].schema) {
+            json = lookup[key].schema.toJSON();
+          } else {
+            json = null;
+          }
+          return {
+            type: lookup[key].type,
+            schema: json
+          };
+        } else {
+          type = lookup[key].type;
+          subSchema = lookup[key].schema;
+          switch (type) {
+            case gg.data.Schema.array:
+            case gg.data.Schema.nested:
+              if ((subSchema != null) && attr in subSchema.lookup) {
+                subLookup = subSchema.lookup;
+                return {
+                  type: subLookup[attr].type,
+                  schema: null
+                };
+              } else {
+                this.log("type: no type for " + attr + " (code 1)");
+                return null;
+              }
+              break;
+            default:
+              this.log("type: no type for " + attr + " (code 2)");
+              return null;
+          }
+        }
+      } else {
+        this.log("type: no type for " + attr + " (code 3)");
+        return null;
+      }
+    };
+
+    Schema.prototype.isKey = function(attr) {
+      return attr in this.lookup;
+    };
+
+    Schema.prototype.isOrdinal = function(attr) {
+      return this.isType(attr, gg.data.Schema.ordinal);
+    };
+
+    Schema.prototype.isNumeric = function(attr) {
+      return this.isType(attr, gg.data.Schema.numeric);
+    };
+
+    Schema.prototype.isTable = function(attr) {
+      return this.isType(attr, gg.data.Schema.array);
+    };
+
+    Schema.prototype.isArray = function(attr) {
+      return this.isType(attr, gg.data.Schema.array);
+    };
+
+    Schema.prototype.isNested = function(attr) {
+      return this.isType(attr, gg.data.Schema.nested);
+    };
+
+    Schema.prototype.isType = function(attr, type) {
+      return this.type(attr) === type;
+    };
+
+    Schema.prototype.isRaw = function(attr) {
+      return attr === this.attrToKeys[attr];
+    };
+
+    Schema.prototype.inArray = function(attr) {
+      var key;
+      key = this.attrToKeys[attr];
+      if (key === attr) {
+        return false;
+      }
+      return this.type(key) === gg.data.Schema.array;
+    };
+
+    Schema.prototype.inNested = function(attr) {
+      var key;
+      key = this.attrToKeys[attr];
+      if (key === attr) {
+        return false;
+      }
+      return this.type(key) === gg.data.Schema.nested;
+    };
+
+    Schema.prototype.setType = function(attr, newType) {
+      var key, schema, subSchema, type;
+      schema = this;
+      key = schema.attrToKeys[attr];
+      if (schema.lookup[key] != null) {
+        if (key === attr) {
+          return schema.lookup[key].type = newType;
+        } else {
+          type = schema.lookup[key].type;
+          subSchema = schema.lookup[key].schema;
+          switch (type) {
+            case gg.data.Schema.array:
+            case gg.data.Schema.nested:
+              if (subSchema != null) {
+                this.log(this);
+                this.log(schema);
+                this.log(subSchema);
+                this.log(attr);
+                return subSchema.lookup[attr].type = newType;
+              }
+          }
+        }
+      }
+    };
+
+    Schema.prototype.extract = function(rawrow, attr) {
+      var key, subObject, subSchema, type;
+      if (!this.contains(attr)) {
+        return null;
+      }
+      key = this.attrToKeys[attr];
+      if (this.lookup[key] != null) {
+        if (key === attr) {
+          return rawrow[key];
+        } else {
+          type = this.lookup[key].type;
+          subSchema = this.lookup[key].schema;
+          subObject = rawrow[key];
+          switch (type) {
+            case gg.data.Schema.array:
+              if ((subSchema != null) && attr in subSchema.lookup) {
+                return _.map(subObject, function(o) {
+                  return o[attr];
+                });
+              }
+              break;
+            case gg.data.Schema.nested:
+              if ((subSchema != null) && attr in subSchema.lookup) {
+                return subObject[attr];
+              }
+              break;
+            default:
+              return null;
+          }
+        }
+      } else {
+        return null;
+      }
+    };
+
+    Schema.type = function(v) {
+      var els, ret;
+      if (_.isDate(v)) {
+        return {
+          type: gg.data.Schema.date
+        };
+      } else if (_.isObject(v)) {
+        ret = {};
+        if (_.isArray(v)) {
+          els = v.slice(0, 20);
+          ret.type = gg.data.Schema.array;
+        } else {
+          els = [v];
+          ret.type = gg.data.Schema.nested;
+        }
+        ret.schema = new gg.data.Schema;
+        _.each(els, function(el) {
+          return _.each(el, function(o, attr) {
+            var type;
+            type = gg.data.Schema.type(o);
+            if (ret.schema.contains(attr)) {
+              if (!ret.schema.isType(attr, type.type)) {
+                return ret.schema.setType(attr, gg.data.Schema.ordinal);
+              }
+            } else {
+              return ret.schema.addColumn(attr, type.type, type.schema);
+            }
+          });
+        });
+        return ret;
+      } else if (_.isNumber(v)) {
+        return {
+          type: gg.data.Schema.numeric
+        };
+      } else {
+        return {
+          type: gg.data.Schema.ordinal
+        };
+      }
+    };
+
+    Schema.fromSpec = function(spec) {
+      var schema;
+      schema = new gg.data.Schema;
+      _.each(spec, function(v, k) {
+        var subSchema;
+        if (_.isObject(v)) {
+          if (v.schema != null) {
+            subSchema = gg.data.Schema.fromSpec(v.schema);
+            return schema.addColumn(k, v.type, subSchema);
+          } else {
+            return schema.addColumn(k, v.type, v.schema);
+          }
+        } else {
+          return schema.addColumn(k, v);
+        }
+      });
+      return schema;
     };
 
     Schema.fromJSON = function(json) {
-      return new gg.data.Schema(_.keys(json), _.values(json));
+      return this.fromSpec(json);
     };
 
     Schema.prototype.toJSON = function() {
-      var col, ret, type, _i, _len, _ref, _ref1;
-      ret = {};
-      _ref = _.zip(this.cols, this.types);
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        _ref1 = _ref[_i], col = _ref1[0], type = _ref1[1];
-        ret[col] = type;
-      }
-      return ret;
+      var json;
+      json = {};
+      _.each(this.lookup, function(v, k) {
+        switch (v.type) {
+          case gg.data.Schema.nested:
+          case gg.data.Schema.array:
+            return json[k] = {
+              type: v.type,
+              schema: v.schema.toJSON()
+            };
+          default:
+            return json[k] = v;
+        }
+      });
+      return json;
     };
 
     return Schema;
@@ -8359,144 +8521,358 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Row.log = gg.util.Log.logger(Row.ggpackage, "row");
 
-    function Row(schema, data, defaults) {
-      var _ref;
+    Row.isNested = function(o) {
+      return _.isObject(o) && !_.isArray(o);
+    };
+
+    function Row(data, schema) {
+      this.data = data;
       this.schema = schema;
-      this.data = data != null ? data : null;
-      this.defaults = defaults != null ? defaults : {};
       this.log = gg.data.Row.log;
       if (this.schema == null) {
-        throw Error("Row needs a schema");
-      }
-      if ((_ref = this.data) == null) {
-        this.data = _.times(this.schema.ncols(), function() {
-          return null;
-        });
-      }
-      if (this.data.length !== this.schema.ncols()) {
-        this.log.warn("ncols in row != schema  " + this.data.length + " != " + (this.schema.ncols()));
+        throw Error;
       }
     }
 
-    Row.prototype.cols = function() {
-      return this.schema.cols;
-    };
-
-    Row.prototype.has = function(col, type) {
-      if (type == null) {
-        type = null;
-      }
-      return this.schema.has(col, type);
-    };
-
-    Row.prototype.contains = function(col, type) {
-      if (type == null) {
-        type = null;
-      }
-      return this.schema.has(col, type);
-    };
-
-    Row.prototype.get = function(col) {
-      return this.data[this.schema.index(col)];
-    };
-
-    /*
-        v = @data[@schema.index(col)]
-        v = @defaults[col] if _.isUndefined(v)
-        v
-    */
-
-
-    Row.prototype.set = function(col, v) {
-      return this.data[this.schema.index(col)] = v;
-    };
-
-    Row.prototype.project = function(cols) {
-      var data, schema,
-        _this = this;
-      schema = this.schema.project(cols);
-      data = _.map(cols, function(col) {
-        return _this.get(col);
+    Row.prototype.rawKeys = function() {
+      var _this = this;
+      return this.schema.attrs().filter(function(attr) {
+        return _this.schema.isRaw(attr);
       });
-      return new gg.data.Row(schema, data);
     };
 
-    Row.prototype.merge = function(row, cols) {
-      var col, ret, schema, _i, _j, _len, _len1, _ref;
+    Row.prototype.nestedKeys = function() {
+      var _this = this;
+      return this.schema.attrs().filter(function(attr) {
+        return _this.schema.isNested(attr);
+      });
+    };
+
+    Row.prototype.arrKeys = function() {
+      var _this = this;
+      return this.schema.attrs().filter(function(attr) {
+        return _this.schema.isArray(attr);
+      });
+    };
+
+    Row.prototype.attrs = function() {
+      return this.schema.attrs();
+    };
+
+    Row.prototype.contains = function(attr) {
+      return this.hasAttr(attr);
+    };
+
+    Row.prototype.hasAttr = function(attr) {
+      return this.schema.contains(attr);
+    };
+
+    Row.prototype.inArray = function(attr) {
+      return this.schema.inArray(attr);
+    };
+
+    Row.prototype.inNested = function(attr) {
+      return this.schema.inNested(attr);
+    };
+
+    Row.prototype.get = function(attr) {
+      var valOrArr;
+      valOrArr = this._get(attr);
+      if (valOrArr != null) {
+        if (_.isArray(valOrArr)) {
+          if (valOrArr.length > 0 && _.isFunction(valOrArr[0])) {
+            return _.map(valOrArr, function(f) {
+              return f();
+            });
+          } else {
+            return valOrArr;
+          }
+        } else if (_.isFunction(valOrArr)) {
+          return valOrArr();
+        } else {
+          return valOrArr;
+        }
+      } else {
+        return null;
+      }
+    };
+
+    Row.prototype._get = function(attr) {
+      var arr, key;
+      if (attr in this.data) {
+        return this.data[attr];
+      } else if (this.schema.inNested(attr)) {
+        key = this.schema.attrToKeys[attr];
+        if (key in this.data && attr in this.data[key]) {
+          return this.data[key][attr];
+        } else {
+          return null;
+        }
+      } else if (this.schema.inArray(attr)) {
+        key = this.schema.attrToKeys[attr];
+        arr = this.data[key] || [];
+        if (arr.length > 0) {
+          arr = _.map(arr, function(o) {
+            if (attr in o) {
+              return o[attr];
+            } else {
+              return null;
+            }
+          });
+        }
+        return arr;
+      } else {
+        return null;
+      }
+    };
+
+    Row.prototype.set = function(attr, val) {
+      var arr, key, n, str,
+        _this = this;
+      if (this.schema.isRaw(attr)) {
+        return this.data[attr] = val;
+      } else if (this.schema.inNested(attr)) {
+        key = this.schema.attrToKeys[attr];
+        return this.data[key][attr] = val;
+      } else if (this.schema.inArray(attr)) {
+        if (!_.isArray(val)) {
+          val = [val];
+        }
+        key = this.schema.attrToKeys[attr];
+        if (!(key in this.data)) {
+          this.data[key] = [];
+        }
+        arr = this.data[key];
+        if (arr != null) {
+          n = Math.max(val.length, arr.length);
+          return _.each(_.range(val.length), function(idx) {
+            if (idx < arr.length) {
+              arr[idx][attr] = val[idx];
+            } else {
+              arr[idx] = {
+                attr: val
+              };
+            }
+            if (idx === arr.length) {
+              return _this.log.warn("creating new " + (val.length - arr.length) + " objs in set(" + attr + ")");
+            }
+          });
+        } else {
+          str = "gg.Row.set attr exists as array, but set val is not";
+          throw Error(str);
+        }
+      } else {
+        return this.data[attr] = val;
+      }
+    };
+
+    Row.prototype.project = function(attrs) {
+      var copy, schema,
+        _this = this;
+      schema = new gg.data.Schema;
+      copy = {};
+      _.each(attrs, function(attr) {
+        var arr, key, typeObj;
+        typeObj = _this.schema.typeObj(attr);
+        if (typeObj == null) {
+          console.log(attrs);
+          console.log(attr);
+          console.log(_this);
+          throw Error("couldn't find type for " + attr);
+        }
+        schema.addColumn(attr, typeObj.type, typeObj.schema);
+        if (_this.schema.isRaw(attr)) {
+          return copy[attr] = _this.data[attr];
+        } else if (_this.schema.inNested(attr)) {
+          key = _this.schema.attrToKeys[attr];
+          if (!(key in copy)) {
+            copy[key] = {};
+          }
+          if (key in _this.data) {
+            return copy[key][attr] = _this.data[key][attr];
+          }
+        } else if (_this.schema.inArray(attr)) {
+          key = _this.schema.attrToKeys[attr];
+          arr = _this.data[key];
+          if ((arr != null) && arr.length > 0) {
+            if (!(key in copy)) {
+              copy[key] = _.map(arr, function() {
+                return {};
+              });
+            }
+            return _.each(arr, function(v, idx) {
+              if (v != null) {
+                return copy[key][idx][attr] = v[attr];
+              }
+            });
+          }
+        } else if (attr in _this.data) {
+          return copy[attr] = _this.data[attr];
+        }
+      });
+      return new gg.data.Row(copy, schema);
+    };
+
+    Row.prototype.rmColumns = function(attrs) {
+      var _this = this;
+      _.each(attrs, function(attr) {
+        var arr, key;
+        key = _this.schema.attrToKeys[attr];
+        if (_this.schema.isRaw(attr)) {
+          return delete _this.data[attr];
+        } else if (_this.schema.inNested(attr)) {
+          return delete _this.data[key][attr];
+        } else if (_this.schema.inArray(attr)) {
+          arr = _this.data[key];
+          if (arr != null) {
+            return _.each(arr, function(subrow) {
+              return delete subrow[attr];
+            });
+          }
+        }
+      });
+      return this;
+    };
+
+    Row.prototype.rmColumn = function(attr) {
+      return this.rmColumns(_.flatten([attr]));
+    };
+
+    Row.prototype.merge = function(row) {
+      if (_.isType(row, gg.data.Row)) {
+        _.extend(this.data, row.data);
+      } else {
+        _.extend(this.data, row);
+      }
+      return this;
+    };
+
+    Row.prototype.flatten = function(cols, recursive) {
+      var arrCols, arrays, nestedCols, perrow, projection, rawData, rowDatas, schema,
+        _this = this;
       if (cols == null) {
         cols = null;
       }
-      if (!_.isType(row, gg.data.Row)) {
-        throw Error("can't merge non row");
+      if (recursive == null) {
+        recursive = false;
       }
       if (cols == null) {
-        cols = row.schema.cols;
+        cols = this.arrKeys().concat(this.nestedKeys());
       }
-      schema = this.schema.clone();
-      schema.merge(row.schema);
-      ret = new gg.data.Row(schema);
-      _ref = this.schema.cols;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        ret.set(col, this.get(col));
+      if (!_.isArray(cols)) {
+        cols = [cols];
       }
-      for (_j = 0, _len1 = cols.length; _j < _len1; _j++) {
-        col = cols[_j];
-        ret.set(col, row.get(col));
+      arrCols = cols.filter(function(attr) {
+        return _this.schema.isArray(attr);
+      });
+      nestedCols = cols.filter(function(attr) {
+        return _this.schema.isNested(attr);
+      });
+      projection = this.schema.attrs().filter(function(attr) {
+        var key;
+        key = _this.schema.attrToKeys[attr];
+        if (_this.schema.inArray(attr)) {
+          return false;
+        }
+        if (_this.schema.isArray(attr)) {
+          if (__indexOf.call(arrCols, attr) >= 0) {
+            return false;
+          } else {
+            return true;
+          }
+        } else {
+          if (__indexOf.call(nestedCols, attr) >= 0) {
+            return false;
+          } else {
+            if (_this.schema.inNested(attr)) {
+              return __indexOf.call(nestedCols, key) >= 0;
+            } else {
+              return true;
+            }
+          }
+        }
+      });
+      rawData = {};
+      _.each(projection, function(attr) {
+        return rawData[attr] = _this.schema.extract(_this.data, attr);
+      });
+      arrays = _.map(arrCols, function(attr) {
+        return _this.schema.extract(_this.data, attr);
+      });
+      perrow = _.zip.apply(_.zip, arrays);
+      if (perrow.length === 0) {
+        _.each(arrCols, function(attr) {
+          return rawData[attr] = [];
+        });
+        return new gg.data.RowTable(this.schema, [rawData]);
       }
-      return ret;
+      rowDatas = _.map(perrow, function(arrRow) {
+        var rowData;
+        rowData = _.clone(rawData);
+        _.each(arrCols, function(attr, idx) {
+          var val;
+          if (recursive) {
+            if (arrRow[idx] != null) {
+              return _.extend(rowData, arrRow[idx]);
+            }
+          } else {
+            val = arrRow[idx];
+            if (val == null) {
+              val = null;
+            }
+            return rowData[attr] = val;
+          }
+        });
+        return rowData;
+      });
+      schema = this.schema.flatten(cols, recursive);
+      return new gg.data.RowTable(schema, rowDatas);
+    };
+
+    Row.prototype.addColumn = function(attr, val) {
+      return this.data[attr] = val;
+    };
+
+    Row.prototype.rmColumn = function(attr, val) {};
+
+    Row.prototype.ncols = function() {
+      return _.size(this.data);
     };
 
     Row.prototype.clone = function() {
-      var data;
-      data = _.map(this.data, function(v) {
-        if ((v != null) && (v.clone != null)) {
-          return v.clone();
-        } else {
-          return v;
-        }
+      var copy;
+      copy = {};
+      _.each(this.data, function(v, k) {
+        return copy[k] = _.isNull(v) ? null : _.isNaN(v) ? NaN : _.isArray(v) ? _.map(v, function(o) {
+          return _.clone(o);
+        }) : _.isDate(v) ? new Date(v) : (v != null) && (v.clone != null) && _.isFunction(v.clone) ? v.clone() : _.isObject(v) ? _.clone(v) : v;
       });
-      return new gg.data.Row(this.schema, data);
-    };
-
-    Row.prototype.toJSON = function() {
-      var _this = this;
-      return _.o2map(this.schema.cols, function(col) {
-        return [col, _this.get(col)];
-      });
+      return new gg.data.Row(copy, this.schema);
     };
 
     Row.prototype.raw = function() {
-      return this.toJSON();
+      return this.data;
     };
 
     Row.prototype.toString = function() {
-      return JSON.stringify(this.toJSON());
-    };
-
-    Row.toRow = function(o, schema) {
-      var col, data, idx, k, v, _i, _len, _ref;
-      if (schema == null) {
-        schema = null;
+      var o,
+        _this = this;
+      if (this.schema == null) {
+        this.log.err("row has no schema");
+        this.log.err(this);
+        throw Error("row has no schema");
       }
-      if (_.isType(o, gg.data.Row)) {
-        return o;
-      }
-      if (schema == null) {
-        schema = new gg.data.Schema;
-        for (k in o) {
-          v = o[k];
-          schema.addColumn(k, gg.data.Schema.type(v));
+      o = _.o2map(this.schema.leafAttrs(), function(attr) {
+        var val;
+        val = _this.get(attr);
+        if (_.isArray(val)) {
+          val = val.slice(0, 5);
         }
-      }
-      data = [];
-      _ref = schema.cols;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        idx = schema.index(col);
-        data[idx] = o[col];
-      }
-      return new gg.data.Row(schema, data);
+        return [attr, val];
+      });
+      o;
+
+      return JSON.stringify(o);
     };
 
     return Row;
@@ -8509,243 +8885,66 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Table.ggpackage = "gg.data.Table";
 
+    Table.reEvalJS = /^{.*}$/;
+
+    Table.reVariable = /^[a-zA-Z]\w*$/;
+
+    Table.reNestedAttr = /^[a-zA-Z]+\.[a-zA-Z]+$/;
+
     Table.log = gg.util.Log.logger(Table.ggpackage, "Table");
 
-    Table.prototype.each = function(f, n) {
-      var idx, iter, ret;
-      if (n == null) {
-        n = null;
+    Table.prototype.type = function(colname) {
+      var val;
+      val = this.get(0, colname);
+      if (val != null) {
+        return typeof val;
+      } else {
+        return 'unknown';
       }
-      iter = this.iterator();
-      idx = 0;
-      ret = [];
-      while (iter.hasNext()) {
-        ret.push(f(iter.next(), idx));
-        idx += 1;
-        if ((n != null) && idx >= n) {
-          break;
-        }
-      }
-      iter.close();
-      return ret;
-    };
-
-    Table.prototype.fastEach = function(f, n) {
-      return this.each(f, n);
-    };
-
-    Table.prototype.iterator = function() {
-      var Iter;
-      Iter = (function() {
-
-        function Iter(table) {
-          this.table = table;
-          this.nrows = this.table.nrows();
-          this.idx = 0;
-        }
-
-        Iter.prototype.reset = function() {
-          return this.idx = 0;
-        };
-
-        Iter.prototype.next = function() {
-          if (!this.hasNext()) {
-            throw Error("no more elements.  idx=" + this.idx);
-          }
-          this.idx += 1;
-          return this.table.get(this.idx - 1);
-        };
-
-        Iter.prototype.hasNext = function() {
-          return this.idx < this.nrows;
-        };
-
-        Iter.prototype.close = function() {
-          return this.table = null;
-        };
-
-        return Iter;
-
-      })();
-      return new Iter(this);
-    };
-
-    Table.prototype.partition = function(cols) {
-      var partitions;
-      partitions = gg.data.Transform.split(this, cols);
-      return _.map(partitions, function(p) {
-        return p['table'];
-      });
-    };
-
-    Table.prototype.has = function(col, type) {
-      return this.contains(col, type);
-    };
-
-    Table.prototype.contains = function(col, type) {
-      return this.schema.has(col, type);
-    };
-
-    Table.prototype.hasCols = function(cols, types) {
-      var _this = this;
-      if (types == null) {
-        types = null;
-      }
-      return _.all(cols, function(col, idx) {
-        var type;
-        type = null;
-        if ((types != null) && types.length > idx) {
-          type = types[idx];
-        }
-        return _this.has(col, type);
-      });
-    };
-
-    Table.prototype.cols = function() {
-      return this.schema.cols;
-    };
-
-    Table.prototype.ncols = function() {
-      return this.schema.ncols();
     };
 
     Table.prototype.nrows = function() {
-      var i;
-      i = 0;
-      this.each(function(row) {
-        return i += 1;
-      });
-      return i;
-    };
-
-    Table.prototype.get = function(idx, col) {
-      if (col == null) {
-        col = null;
-      }
       throw "not implemented";
     };
 
-    Table.prototype._getColumn = function(col) {
+    Table.prototype.ncols = function() {
       throw "not implemented";
     };
 
-    Table.prototype.getCol = function(col) {
-      return this.getColumn(col);
-    };
-
-    Table.prototype.getColumn = function(col) {
-      var colData, path;
-      if (this.has(col)) {
-        return this._getColumn(col);
-      } else {
-        path = col.split('.');
-        if (this.has(path[0])) {
-          colData = this._getColumn(path[0]);
-          path = _.rest(path);
-          return colData = _.map(colData, function(v) {
-            return _.reach(v, path);
-          });
-        } else {
-          throw Error("col " + col + " not in schema " + (this.cols()));
-        }
-      }
-    };
-
-    Table.prototype.rows = function() {
-      return this.each(function(row) {
-        return row;
-      });
-    };
-
-    Table.prototype.getRows = function() {
-      return this.each(function(row) {
-        return row;
-      });
-    };
-
-    Table.prototype.raw = function() {
+    Table.prototype.colNames = function() {
       throw "not implemented";
     };
 
-    Table.prototype.stats = function() {
-      throw "not implemented";
+    Table.prototype.contains = function(colName) {
+      return __indexOf.call(this.colNames(), colName) >= 0;
     };
 
-    Table.prototype.klass = function() {
-      return gg.data.ColTable;
+    Table.merge = function(tables) {
+      return gg.data.RowTable.merge(tables);
     };
 
-    Table.prototype.setColumn = function(col, val, type) {
-      var vals;
-      if (type == null) {
-        type = null;
+    Table.prototype.each = function(f, n) {
+      var _this = this;
+      if (n == null) {
+        n = null;
       }
-      if (this.has(col)) {
-        this.log.warn("" + col + " already in schema " + (this.schema.toString()));
+      if (n == null) {
+        n = this.nrows();
       }
-      vals = _.times(this.nrows(), function() {
-        return val;
+      return _.map(_.range(n), function(i) {
+        return f(_this.get(i), i);
       });
-      this.addColumn(col, vals, type, true);
-      return this;
     };
 
-    Table.prototype._addColumn = function(col, vals) {
+    Table.prototype.map = function(fOrMap, colName) {
+      if (colName == null) {
+        colName = null;
+      }
       throw Error("not implemented");
     };
 
-    Table.prototype.addColumn = function(col, vals, type, overwrite) {
-      if (type == null) {
-        type = null;
-      }
-      if (overwrite == null) {
-        overwrite = false;
-      }
-      if (vals.length !== this.nrows()) {
-        throw Error("values not same length as table: " + vals.length + " != " + (this.nrows()));
-      }
-      if (this.has(col) && !overwrite) {
-        throw Error("column already exists: " + col);
-      }
-      if (type == null) {
-        type = gg.data.Schema.type(vals[0]);
-      }
-      this.schema.addColumn(col, type);
-      this._addColumn(col, vals);
-      return this;
-    };
-
-    Table.prototype._rmColumn = function(col) {
-      throw Error("not implemented");
-    };
-
-    Table.prototype.rmColumn = function(col) {
-      return this._rmColumn(col);
-    };
-
-    Table.prototype.addRow = function(row) {
-      throw "not implemented";
-    };
-
-    Table.prototype.toJSON = function() {
-      return {
-        schema: this.schema.toJSON(),
-        data: _.toJSON(this.raw()),
-        klass: this.klass().name
-      };
-    };
-
-    Table.fromJSON = function(json) {
-      var klass;
-      klass = this.type2class(json.klass);
-      if (klass == null) {
-        klass = gg.data.ColTable;
-      }
-      return klass.fromJSON(json);
-    };
-
-    Table.prototype.toString = function() {
-      return JSON.stringify(this.raw());
+    Table.prototype.clone = function() {
+      return this.cloneDeep();
     };
 
     Table.prototype.cloneShallow = function() {
@@ -8753,99 +8952,122 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Table.prototype.cloneDeep = function() {
-      return this.klass().fromJSON(this.toJSON());
+      throw "not implemented";
     };
 
-    Table.prototype.clone = function() {
-      return this.cloneDeep();
+    Table.prototype.merge = function(table) {
+      throw "not implemented";
     };
 
-    Table.type2class = function(tabletype) {
-      if (tabletype == null) {
-        tabletype = "row";
-      }
-      switch (tabletype) {
-        case "row":
-        case "RowTable":
-          return gg.data.RowTable;
-        case "col":
-        case "ColTable":
-          return gg.data.ColTable;
-        default:
-          return null;
-      }
+    Table.prototype.split = function(gbfunc) {
+      throw "not implemented";
     };
 
-    Table.deserialize = function(str) {
-      var json;
-      json = JSON.parse(str);
-      switch (json.type) {
-        case 'multi':
-          return gg.data.MultiTable.deserialize(json);
-        case 'col':
-          return gg.data.ColTable.deserialize(json);
-        case 'row':
-          return gg.data.RowTable.deserialize(json);
-        default:
-          throw Error("can't deserialize data of type: " + json.type);
-      }
+    Table.prototype.transform = function(colname, func) {
+      throw "not implemented";
     };
 
-    Table.fromArray = function(rows, schema, tabletype) {
-      var klass;
-      if (schema == null) {
-        schema = null;
-      }
-      if (tabletype == null) {
-        tabletype = "row";
-      }
-      klass = this.type2class(tabletype);
-      if (klass == null) {
-        throw Error("" + tabletype + " doesnt have a class");
-      }
-      return klass.fromArray(rows, schema);
+    Table.prototype.filter = function(f) {
+      throw Error("not implemented");
     };
 
-    Table.merge = function(tables, tabletype) {
-      var klass, schema, t, table, _i, _len;
-      if (tabletype == null) {
-        tabletype = "row";
+    Table.prototype.addConstColumn = function(name, val, type) {
+      if (type == null) {
+        type = null;
       }
-      klass = this.type2class(tabletype);
-      if (tables.length === 0) {
-        schema = new gg.data.Schema();
-        return new klass(schema);
-      } else {
-        schema = gg.data.Schema.merge(_.map(tables, function(t) {
-          return t.schema;
-        }));
-        table = new klass(schema);
-        for (_i = 0, _len = tables.length; _i < _len; _i++) {
-          t = tables[_i];
-          t.each(function(row) {
-            return table.addRow(row.raw());
+      throw "not implemented";
+    };
+
+    Table.prototype.addColumn = function(name, vals, type) {
+      if (type == null) {
+        type = null;
+      }
+      throw "not implemented";
+    };
+
+    Table.prototype.addRows = function(rows) {
+      var _this = this;
+      return _.each(rows, function(row) {
+        return _this.addRow(row);
+      });
+    };
+
+    Table.prototype.addRow = function(row) {
+      throw "not implemented";
+    };
+
+    Table.prototype.get = function(row, col) {
+      if (col == null) {
+        col = null;
+      }
+      throw "not implemented";
+    };
+
+    Table.prototype.asArray = function() {
+      throw "not implemented";
+    };
+
+    Table.inferSchemaFromObjs = function(rows) {
+      var row, schema,
+        _this = this;
+      schema = new gg.data.Schema;
+      row = rows.length > 0 ? rows[0] : {};
+      if (_.isType(row, gg.data.Row)) {
+        row = row.raw();
+      }
+      _.each(row, function(v, k) {
+        var typeObj;
+        typeObj = gg.data.Schema.type(v);
+        return schema.addColumn(k, typeObj.type, typeObj.schema);
+      });
+      return schema;
+    };
+
+    Table.findOrdinals = function(rows, key, typeObj) {
+      var schema, vals;
+      switch (typeObj.type) {
+        case gg.data.Schema.numeric:
+          vals = _.map(rows, function(row) {
+            if (_.isSubclass(row, gg.data.Row)) {
+              return row.get(key);
+            } else {
+              return row[key];
+            }
           });
-        }
-        return table;
+          break;
+        case gg.data.Schema.array:
+        case gg.data.Schema.nested:
+          schema = new gg.data.Schema;
+          schema.addColumn(key, typeObj.type, typeObj.schema);
+          _.each(schema.attrs(), function(attr) {
+            if (schema.isNumeric(attr)) {
+              vals = _.map(rows, function(row) {
+                if (_.isSubclass(row, gg.data.Row)) {
+                  row = row.raw();
+                }
+                return schema.extract(row, attr);
+              });
+              vals = _.flatten(vals);
+              if (gg.data.Table.isOrdinal(vals)) {
+                return typeObj.schema.setType(attr, gg.data.Schema.ordinal);
+              }
+            }
+          });
       }
+      return typeObj;
     };
 
-    Table.reEvalJS = /^{.*}$/;
-
-    Table.reVariable = /^[a-zA-Z]\w*$/;
-
-    Table.reNestedAttr = /^[a-zA-Z]+\.[a-zA-Z]+$/;
-
-    Table.isEvalJS = function(s) {
-      return this.reEvalJS.test(s);
-    };
-
-    Table.isVariable = function(s) {
-      return this.reVariable.test(s);
-    };
-
-    Table.isNestedAttr = function(s) {
-      return this.reNestedAttr.test(s);
+    Table.isOrdinal = function(vals) {
+      var counter, v, _i, _len;
+      counter = {};
+      for (_i = 0, _len = vals.length; _i < _len; _i++) {
+        v = vals[_i];
+        counter[v] = true;
+        if (_.size(counter) > 10) {
+          break;
+        }
+      }
+      return _.size(counter) < 5;
     };
 
     return Table;
@@ -8941,8 +9163,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Textsize.log = gg.util.Log.logger("gg.util.Textsize", "Textsize");
 
-    Textsize._fontSizeCache = {};
-
     Textsize._exSizeCache = {};
 
     Textsize._defaultWidths = (function() {
@@ -8980,7 +9200,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return size;
     };
 
-    Textsize.textSize = function(text, opts, el) {
+    Textsize.textSize = function(text, opts) {
       var body, css, defaults, div, fontsize, height, log, ret, width;
       if (opts == null) {
         opts = {};
@@ -9000,16 +9220,12 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         _.extend(css, opts);
         $(div).css(css);
         $(div).attr(css);
-        if (el == null) {
-          el = body;
-        }
-        el.appendChild(div);
+        body.appendChild(div);
         width = div.clientWidth;
         height = div.clientHeight;
-        el.removeChild(div);
         log("textsize of " + text + ": " + width + "x" + height + " with " + (JSON.stringify(opts)));
         if (_.any([width, height], (function(v) {
-          return (!(v != null)) || _.isNaN(v) || v === 0;
+          return _.isNaN(v) || v === 0;
         }))) {
           throw Error("exSize: width(" + width + "), height(" + height + ")");
         }
@@ -9030,14 +9246,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       }
     };
 
-    Textsize.exSize = function(opts, el) {
+    Textsize.exSize = function(opts) {
       var alphas, optsJson, ret;
       optsJson = JSON.stringify(opts);
       if (optsJson in gg.util.Textsize._exSizeCache) {
         return gg.util.Textsize._exSizeCache[optsJson];
       } else {
         alphas = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        ret = gg.util.Textsize.textSize(alphas, opts, el);
+        ret = gg.util.Textsize.textSize(alphas, opts);
         ret.width = ret.w = ret.w / alphas.length;
         gg.util.Textsize._exSizeCache[optsJson] = ret;
         return ret;
@@ -9052,8 +9268,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return sw > dims.w || sh > dims.h;
     };
 
-    Textsize.fontSize = function(text, width, height, opts, el) {
-      var body, css, dim, div, key, n, size;
+    Textsize.fontSize = function(text, width, height, opts) {
+      var body, css, dim, div, n, size;
+      body = document.getElementsByTagName("body")[0];
+      div = document.createElement("div");
       css = {
         color: "white",
         "font-family": "arial"
@@ -9063,20 +9281,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         left: -100000,
         position: "absolute"
       });
-      key = "" + text.length + "--" + width + "--" + height + "--" + (JSON.stringify(css));
-      if (key in this._fontSizeCache) {
-        return this._fontSizeCache[key];
-      }
-      body = document.getElementsByTagName("body")[0];
-      div = document.createElement("div");
       $(div).css(css).attr({
         width: width,
         height: height
       }).text(text);
-      if (el == null) {
-        el = body;
-      }
-      el.appendChild(div);
+      body.appendChild(div);
       dim = {
         w: width,
         h: height
@@ -9098,12 +9307,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           size += 5;
         }
       }
-      el.removeChild(div);
-      this._fontSizeCache[key] = size;
+      div.remove();
       return size;
     };
 
-    Textsize.fit = function(text, width, height, minfont, opts, el) {
+    Textsize.fit = function(text, width, height, minfont, opts) {
       var dim, nchar, optsize;
       if (text == null) {
         text = "";
@@ -9112,56 +9320,26 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         opts = {};
       }
       optsize = this.fontSize(text, width, height, opts);
-      nchar = text.length;
       this.log("optsize:   " + optsize);
       this.log("minfont:   " + minfont);
       this.log("container: " + width + " x " + height);
       this.log("text:      " + text);
       if (optsize < minfont) {
         opts["font-size"] = "" + minfont + "pt";
-        dim = this.textSize(text, opts, el);
+        dim = this.textSize(text, opts);
         this.log("dim:    " + dim.w);
         nchar = Math.floor(text.length * width / dim.w);
         text = text.substr(0, nchar);
         optsize = minfont;
       }
       opts["font-size"] = "" + optsize + "pt";
-      dim = this.textSize(text, opts, el);
+      dim = this.textSize(text, opts);
       return {
         text: text,
         font: optsize,
         size: optsize,
-        'font-size': "" + optsize + "pt",
-        nchar: nchar,
         w: dim.w,
         h: dim.h
-      };
-    };
-
-    Textsize.fitMany = function(texts, w, h, minfont, opts, el) {
-      var fonts, minsize, nchar;
-      if (opts == null) {
-        opts = {};
-      }
-      texts = _.flatten([texts]);
-      texts = _.map(texts, String);
-      fonts = _.map(texts, function(text) {
-        return gg.util.Textsize.fit(text, w, h, minfont, opts, el);
-      });
-      minfont = _.min(fonts, function(f) {
-        return f.size;
-      });
-      minsize = minfont.size;
-      nchar = minfont.nchar;
-      return function(text) {
-        text = String(text).substr(0, nchar);
-        return {
-          text: text,
-          font: minfont.size,
-          size: minfont.size,
-          'font-size': minfont['font-size'],
-          nchar: nchar
-        };
       };
     };
 
@@ -9177,57 +9355,36 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Aesmap.mappingToFunctions = function(table, mapping) {
       var key, newkey, ret, val, _i, _len, _ref;
-      ret = [];
+      ret = {};
       for (key in mapping) {
         val = mapping[key];
         _ref = gg.core.Aes.resolve(key);
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           newkey = _ref[_i];
-          ret.push(_.mapToFunction(table, newkey, val));
+          ret[newkey] = _.mapToFunction(table, newkey, val);
         }
       }
       return ret;
     };
 
     Aesmap.mapToFunction = function(table, key, val) {
-      var args, cmd, cmds, f, funcs, opstore, userCode, varFunc;
-      opstore = {};
-      opstore.writeSchema = function() {};
+      var cmd, cmds, funcs, userCode, varFunc;
       if (_.isFunction(val)) {
-        f = function(row) {
-          var ret;
-          row = new gg.util.RowWrapper(row);
-          ret = val(row);
-          opstore.writeSchema([key], row.accessed);
-          return ret;
-        };
-        return [key, f, gg.data.Schema.unknown];
-      } else if (table.has(val)) {
-        opstore.writeSchema(key, val);
-        f = function(row) {
+        return val;
+      } else if (table.contains(val)) {
+        return function(row) {
           return row.get(val);
         };
-        return [key, f, table.schema.type(val)];
       } else if (_.isObject(val)) {
-        if ('f' in val && 'args' in val) {
-          args = val.args;
-          f = val.f;
-          [key, f, val.type || gg.data.Schema.unknown];
-          if (f.length !== args.length) {
-            throw Error();
-          }
-        } else {
-          funcs = _.mappingToFunctions(table, val);
-          f = function(row) {
-            var ret;
-            ret = {};
-            _.each(funcs, function(f, subkey) {
-              return ret[subkey] = f(row);
-            });
-            return ret;
-          };
-          return [key, f, gg.data.Schema.object];
-        }
+        funcs = _.mappingToFunctions(table, val);
+        return function(row) {
+          var ret;
+          ret = {};
+          _.each(funcs, function(f, subkey) {
+            return ret[subkey] = f(row);
+          });
+          return ret;
+        };
       } else if (key !== 'text' && gg.data.Table.reEvalJS.test(val)) {
         userCode = val.slice(1, val.length - 1);
         varFunc = function(k) {
@@ -9235,41 +9392,19 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
             return "var " + k + " = row.get('" + k + "');";
           }
         };
-        cmds = _.compact(_.map(table.schema.cols, varFunc));
+        cmds = _.compact(_.map(table.schema.attrs(), varFunc));
         cmds.push("return " + userCode + ";");
         cmd = cmds.join('');
-        f = Function("row", cmd);
-        return [key, f, gg.data.Schema.unknown];
+        return Function("row", cmd);
       } else {
         gg.util.Aesmap.log("mapToFunction: const:  f(" + key + ")->" + val);
-        f = function(row) {
+        return function(row) {
           return val;
         };
-        return [key, f, gg.data.Schema.type(val)];
       }
     };
 
     return Aesmap;
-
-  })();
-
-  gg.util.RowWrapper = (function() {
-
-    function RowWrapper(row) {
-      this.row = row;
-      this.accessed = {};
-    }
-
-    RowWrapper.prototype.get = function(attr) {
-      this.accessed[attr] = true;
-      return this.row.get(attr);
-    };
-
-    RowWrapper.prototype.has = function(col, type) {
-      return this.row.has(col, type);
-    };
-
-    return RowWrapper;
 
   })();
 
@@ -9278,15 +9413,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
   gg.util.Util = (function() {
 
     function Util() {}
-
-    Util.hashCode = function(s) {
-      var f;
-      f = function(a, b) {
-        a = ((a << 5) - a) + b.charCodeAt(0);
-        return a & a;
-      };
-      return s.split("").reduce(f, 0);
-    };
 
     Util.toJSON = function(o, reject, path) {
       var ret;
@@ -9362,12 +9488,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           return path.pop();
         });
       } else {
-        if (_.isUndefined(o)) {
-          o = null;
-        }
         ret = {
           type: 'primitive',
-          val: JSON.stringify(o)
+          val: o
         };
       }
       return ret;
@@ -9390,7 +9513,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           });
           return ret;
         case 'date':
-          return ret = new Date(JSON.parse(json.val));
+          return ret = Date.parse(json.val);
         case 'object':
           ret = {};
           _.each(json.val, function(v, k) {
@@ -9409,23 +9532,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           return ret;
         case 'rejected':
           return null;
-        case 'primitive':
-          return JSON.parse(json.val);
         default:
-          throw Error("unexpected json object: " + json);
+          return json.val;
       }
-    };
-
-    Util.reach = function(o, path) {
-      var col, _i, _len;
-      for (_i = 0, _len = path.length; _i < _len; _i++) {
-        col = path[_i];
-        if (o == null) {
-          break;
-        }
-        o = o[col];
-      }
-      return o;
     };
 
     Util.ggklass = function(ggpackage) {
@@ -9450,9 +9559,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         var args, pair;
         args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
         pair = f.apply(null, args);
-        if (pair != null) {
-          return ret[pair[0]] = pair[1];
-        }
+        return ret[pair[0]] = pair[1];
       });
       return ret;
     };
@@ -9463,10 +9570,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this.o2map.apply(this, args);
     };
 
-    Util.sum = function(arr, f, ctx) {
-      if ((f != null) && _.isFunction(f)) {
-        arr = _.map(arr, f, ctx);
-      }
+    Util.sum = function(arr) {
       return _.reduce(arr, (function(a, b) {
         return a + b;
       }), 0);
@@ -9640,9 +9744,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     mapToFunction: gg.util.Aesmap.mapToFunction,
     mappingToFunctions: gg.util.Aesmap.mappingToFunctions,
     cross: gg.util.Util.cross,
-    dateFromISOString: gg.util.Util.dateFromISOString,
-    reach: gg.util.Util.reach,
-    hashCode: gg.util.Util.hashCode
+    dateFromISOString: gg.util.Util.dateFromISOString
   });
 
   Date.prototype.fromISOString = gg.util.Util.dateFromISOString;
@@ -9668,18 +9770,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.rangeUpdated = false;
       this.id = gg.scale.Scale.prototype._id += 1;
       this.center = null;
-      this.frozen = false;
       this.parseSpec();
     }
 
     Scale.prototype.parseSpec = function() {
-      var attrs, domain, range;
+      var attrs, domain, range, _ref;
       this.aes = this.spec.aes;
       if (this.aes == null) {
         throw Error("Scale.fromSpec needs an aesthetic: " + (JSON.stringify(this.spec)));
       }
       range = _.findGoodAttr(this.spec, ["range"], null);
-      if (range != null) {
+      if ((range != null) && (_ref = this.aes, __indexOf.call(gg.scale.Scale.xys, _ref) < 0)) {
         this.range(range);
         this.rangeSet = true;
       }
@@ -9692,7 +9793,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.center = _.findGood([this.spec.center, null]);
       this.domainUpdated = _.findGood([this.spec.domainUpdated, false]);
       this.rangeUpdated = _.findGood([this.spec.rangeUpdated, false]);
-      this.frozen = _.findGood([this.spec.frozen, false]);
       return this.log = gg.util.Log.logger(this.ggpackage, "Scale " + this.aes + "." + this.id + " (" + this.type + "," + this.constructor.name + ")");
     };
 
@@ -9774,7 +9874,22 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Scale.prototype.clone = function() {
+      var klass, ret, spec;
       return gg.scale.Scale.fromJSON(this.toJSON());
+      klass = this.constructor;
+      spec = _.clone(this.spec);
+      spec.aes = this.aes;
+      spec.type = this.type;
+      spec.domainUpdated = this.domainUpdated;
+      spec.domainSet = this.domainSet;
+      spec.rangeUpdated = this.rangeUpdated;
+      spec.rangeSet = this.rangeSet;
+      spec.center = this.center;
+      ret = new klass(spec);
+      if (this.d3Scale != null) {
+        ret.d3Scale = this.d3Scale.copy();
+      }
+      return ret;
     };
 
     Scale.prototype.toJSON = function() {
@@ -9787,7 +9902,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       spec.rangeUpdated = this.rangeUpdated;
       spec.rangeSet = this.rangeSet;
       spec.center = this.center;
-      spec.frozen = this.frozen;
       spec.ggpackage = this.constructor.ggpackage;
       spec.domain = this.domain();
       spec.range = this.range();
@@ -9811,7 +9925,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       clone.rangeUpdated = json.rangeUpdated;
       clone.rangeSet = json.rangeSet;
       clone.center = json.center;
-      clone.frozen = json.frozen;
       return clone;
     };
 
@@ -9844,21 +9957,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Scale.prototype.domain = function(interval) {
-      if (interval != null) {
-        if (!this.domainSet) {
-          this.domainUpdated = true;
-          this.d3Scale.domain(interval);
-        }
+      if ((interval != null) && !this.domainSet) {
+        this.domainUpdated = true;
+        this.d3Scale.domain(interval);
       }
       return this.d3Scale.domain();
     };
 
     Scale.prototype.range = function(interval) {
-      if (interval != null) {
-        if (!this.rangeSet) {
-          this.rangeUpdated = true;
-          this.d3Scale.range(interval);
-        }
+      if ((interval != null) && !this.rangeSet) {
+        this.rangeUpdated = true;
+        this.d3Scale.range(interval);
       }
       return this.d3Scale.range();
     };
@@ -9917,21 +10026,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     Factory.ggpackage = 'gg.scale.Factory';
 
     function Factory(defaults) {
-      this.defaults = defaults != null ? defaults : {};
+      this.defaults = defaults;
     }
 
     Factory.fromSpec = function(defaults) {
       var sf;
       sf = new gg.scale.Factory(defaults);
       return sf;
-    };
-
-    Factory.prototype.type = function(aes) {
-      if (aes in this.defaults) {
-        return this.defaults[aes].type;
-      } else {
-        return gg.data.Schema.unknown;
-      }
     };
 
     Factory.prototype.scale = function(aes, type) {
@@ -10005,6 +10106,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Graph.prototype.add = function(node) {
       var id;
+      if (node == null) {
+        console.log(node);
+      }
       id = this.idFunc(node);
       if (id in this.id2node) {
         return this;
@@ -10037,7 +10141,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Graph.prototype.connect = function(from, to, type, metadata) {
-      var fid, tid, _base, _base1, _ref, _ref1;
+      var fid, tid;
       if (metadata == null) {
         metadata = null;
       }
@@ -10045,11 +10149,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.add(to);
       fid = this.idFunc(from);
       tid = this.idFunc(to);
-      if ((_ref = (_base = this.pid2cid[fid])[tid]) == null) {
-        _base[tid] = {};
+      if (this.pid2cid[fid][tid] == null) {
+        this.pid2cid[fid][tid] = {};
       }
-      if ((_ref1 = (_base1 = this.cid2pid[tid])[fid]) == null) {
-        _base1[fid] = {};
+      if (this.cid2pid[tid][fid] == null) {
+        this.cid2pid[tid][fid] = {};
       }
       this.pid2cid[fid][tid][type] = metadata;
       this.cid2pid[tid][fid][type] = metadata;
@@ -10367,10 +10471,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (op == null) {
         op = null;
       }
-      flowid = null;
-      if (flow != null) {
-        flowid = flow.id;
-      }
+      flowid = flow.id;
       if (!(flowid in this.pstores)) {
         this.pstores[flowid] = new gg.prov.PStore(flow);
       }
@@ -10386,7 +10487,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       PStore.__super__.constructor.call(this);
       this.opstores = {};
       this.id(function(o) {
-        return "op-" + o.id;
+        return JSON.stringify(o);
       });
     }
 
@@ -10402,237 +10503,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     return PStore;
 
   })(gg.util.Graph);
-
-  gg.data.RowTable = (function(_super) {
-
-    __extends(RowTable, _super);
-
-    RowTable.ggpackage = "gg.data.RowTable";
-
-    function RowTable(schema, rows) {
-      var _this = this;
-      this.schema = schema;
-      if (rows == null) {
-        rows = [];
-      }
-      if (this.schema == null) {
-        throw Error("schema not present");
-      }
-      if (rows == null) {
-        rows = [];
-      }
-      this.rows = [];
-      _.each(rows, function(row) {
-        return _this.addRow(row);
-      });
-      this.log = gg.data.Table.log;
-    }
-
-    RowTable.prototype.nrows = function() {
-      return this.rows.length;
-    };
-
-    RowTable.prototype.klass = function() {
-      return gg.data.RowTable;
-    };
-
-    RowTable.prototype.cloneShallow = function() {
-      var rows, t;
-      rows = _.clone(this.rows);
-      t = new gg.data.RowTable(this.schema.clone());
-      t.rows = rows;
-      return t;
-    };
-
-    RowTable.prototype.cloneDeep = function() {
-      var rows, t;
-      rows = this.rows.map(function(row) {
-        return _.clone(row);
-      });
-      t = new gg.data.RowTable(this.schema.clone());
-      t.rows = rows;
-      return t;
-    };
-
-    RowTable.prototype.fastEach = function(f, n) {
-      var idx, raw, ret, row, _i, _len, _ref;
-      if (n == null) {
-        n = null;
-      }
-      row = new gg.data.Row(this.schema);
-      ret = [];
-      _ref = this.rows;
-      for (idx = _i = 0, _len = _ref.length; _i < _len; idx = ++_i) {
-        raw = _ref[idx];
-        row.data = raw;
-        ret.push(f(row, idx));
-        if ((n != null) && idx >= n) {
-          break;
-        }
-      }
-      return ret;
-    };
-
-    RowTable.prototype._addColumn = function(col, vals) {
-      var colidx, row, rowidx, _i, _len, _ref;
-      if (!this.has(col)) {
-        throw Error("col should be in the schema: " + col);
-      }
-      colidx = this.schema.index(col);
-      _ref = this.rows;
-      for (rowidx = _i = 0, _len = _ref.length; _i < _len; rowidx = ++_i) {
-        row = _ref[rowidx];
-        row[colidx] = vals[rowidx];
-      }
-      return this;
-    };
-
-    RowTable.prototype._getColumn = function(col) {
-      var idx;
-      idx = this.schema.index(col);
-      return _.map(this.rows, function(row) {
-        return row[idx];
-      });
-    };
-
-    RowTable.prototype._rmColumn = function(col) {
-      var rmidx, row, _i, _len, _ref;
-      if (!this.has(col)) {
-        return this;
-      }
-      rmidx = this.schema.index(col);
-      _ref = this.rows;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        row = _ref[_i];
-        row.splice(rmidx, 1);
-      }
-      this.schema = this.schema.exclude(col);
-      return this;
-    };
-
-    RowTable.prototype.addRow = function(row, pad) {
-      var i, _i, _ref;
-      if (pad == null) {
-        pad = false;
-      }
-      if (row == null) {
-        throw Error("adding null row");
-      }
-      if (_.isArray(row)) {
-        row = _.clone(row);
-        if (row.length !== this.schema.ncols()) {
-          if (row.length > this.schema.ncols() || !pad) {
-            throw Error("row len wrong: " + row.length + " != " + this.schema.length);
-          } else {
-            for (i = _i = 0, _ref = this.schema.ncols() - row.length; 0 <= _ref ? _i < _ref : _i > _ref; i = 0 <= _ref ? ++_i : --_i) {
-              row.push(null);
-            }
-          }
-        }
-      } else if (_.isType(row, gg.data.Row)) {
-        row = _.map(this.cols(), function(col) {
-          return row.get(col);
-        });
-      } else if (_.isObject(row)) {
-        row = _.map(this.cols(), function(col) {
-          return row[col];
-        });
-      } else {
-        throw Error("row type(" + row.constructor.name + ") not supported");
-      }
-      this.rows.push(row);
-      return this;
-    };
-
-    RowTable.prototype.get = function(idx, col) {
-      if (col == null) {
-        col = null;
-      }
-      if (idx >= 0 && idx < this.nrows()) {
-        if (col != null) {
-          if (this.schema.has(col)) {
-            return this.rows[idx][this.schema.index(col)];
-          } else {
-            return null;
-          }
-        } else {
-          return new gg.data.Row(this.schema, this.rows[idx]);
-        }
-      } else {
-        return null;
-      }
-    };
-
-    RowTable.prototype.raw = function() {
-      var _this = this;
-      return _.map(this.rows, function(r) {
-        var col, o, _i, _len, _ref;
-        o = {};
-        _ref = _this.schema.cols;
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          col = _ref[_i];
-          o[col] = r[_this.schema.index(col)];
-        }
-        return o;
-      });
-    };
-
-    RowTable.prototype.serialize = function() {
-      return JSON.stringify({
-        data: _.toJSON(this.rows),
-        schema: JSON.stringify(this.schema.toJSON()),
-        type: 'row'
-      });
-    };
-
-    RowTable.deserialize = function(json) {
-      var raws, schema, t;
-      raws = _.fromJSON(json.data);
-      schema = gg.data.Schema.fromJSON(JSON.parse(json.schema));
-      t = new gg.data.RowTable(schema);
-      t.rows = raws;
-      return t;
-    };
-
-    RowTable.fromArray = function(rows, schema) {
-      if (schema == null) {
-        schema = null;
-      }
-      if (schema == null) {
-        schema = gg.data.Schema.infer(rows);
-      }
-      if ((rows != null) && _.isType(rows[0], gg.data.Row)) {
-        rows = _.map(rows, function(row) {
-          return _.map(schema.cols, function(col) {
-            return row.get(col);
-          });
-        });
-      } else {
-        rows = _.map(rows, function(o) {
-          return _.map(schema.cols, function(col) {
-            return o[col];
-          });
-        });
-      }
-      return new gg.data.RowTable(schema, rows);
-    };
-
-    RowTable.fromJSON = function(json) {
-      var dataJson, raw, rows, schema, schemaJson, _i, _len;
-      schemaJson = json.schema;
-      dataJson = _.fromJSON(json.data);
-      schema = gg.data.Schema.fromJSON(schemaJson);
-      rows = [];
-      for (_i = 0, _len = dataJson.length; _i < _len; _i++) {
-        raw = dataJson[_i];
-        rows.push(gg.data.Row.toRow(raw, schema));
-      }
-      return new gg.data.RowTable(schema, rows);
-    };
-
-    return RowTable;
-
-  })(gg.data.Table);
 
   gg.util.MArray = (function(_super) {
 
@@ -10671,89 +10541,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     return MArray;
 
   })(Array);
-
-  gg.util.DateUtil = (function() {
-
-    function DateUtil() {}
-
-    DateUtil.period = function(block, startDate) {
-      if (startDate == null) {
-        startDate = null;
-      }
-      if (startDate == null) {
-        startDate = new Date('2000-01-01');
-      }
-      return function(d) {
-        var diff, foo;
-        diff = d.getTime() - startDate.getTime();
-        foo = diff % block;
-        return new Date(startDate.getTime() + foo);
-      };
-    };
-
-    DateUtil.byDay = function(date, startDate) {
-      var diff;
-      if (startDate == null) {
-        startDate = null;
-      }
-      if (startDate == null) {
-        startDate = new Date('2000-01-01');
-      }
-      diff = date.getTime() - this.truncToDay(date);
-      return new Date(startDate.getTime() + diff);
-    };
-
-    DateUtil.byWeek = function(date, startDate) {
-      var diff;
-      if (startDate == null) {
-        startDate = null;
-      }
-      if (startDate == null) {
-        startDate = new Date('2000-01-01');
-      }
-      diff = date.getTime() - this.truncToWeek(date);
-      return new Date(startDate.getTime() + diff);
-    };
-
-    DateUtil.byMonth = function(date, startDate) {
-      var diff;
-      if (startDate == null) {
-        startDate = null;
-      }
-      if (startDate == null) {
-        startDate = new Date('2000-01-01');
-      }
-      diff = date.getTime() - this.truncToMonth(date);
-      return new Date(startDate.getTime() + diff);
-    };
-
-    DateUtil.trunc = function(block, date) {
-      var firstday, firstdow, firsttime, mintime, timeinweek, trunctime;
-      firstday = new Date(date.getFullYear(), 1, 1, 0, 0);
-      firsttime = firstday.getTime();
-      firstdow = firstday.getDay();
-      mintime = firsttime - (firstdow * 1000 * 60 * 60 * 24);
-      timeinweek = (date.getTime() - mintime) % block;
-      trunctime = date.getTime() - timeinweek;
-      trunctime = Math.max(trunctime, firsttime);
-      return new Date(trunctime);
-    };
-
-    DateUtil.truncToMonth = function(date) {
-      return new Date(date.getFullYear(), date.getMonth(), 1);
-    };
-
-    DateUtil.truncToWeek = function(date) {
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
-    };
-
-    DateUtil.truncToDay = function(date) {
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    };
-
-    return DateUtil;
-
-  })();
 
   gg.util.Params = (function() {
 
@@ -10819,12 +10606,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this;
     };
 
-    Params.prototype.require = function(key, errmsg) {
-      if (!this.has(key)) {
-        throw Error(errmsg);
-      }
-    };
-
     Params.prototype.ensureAll = function(o) {
       var _this = this;
       _.each(o, function(v, k) {
@@ -10836,10 +10617,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         return _this.ensure(k, v[0], v[1]);
       });
       return this;
-    };
-
-    Params.prototype.has = function(key) {
-      return this.contains(key);
     };
 
     Params.prototype.contains = function(key) {
@@ -10873,7 +10650,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         _this = this;
       removedEls = {
         svg: this.rm('svg'),
-        event: this.rm('event'),
         pairs: _.clone(this.rm('pairs'))
       };
       _.each(_.keys(this.data), function(key) {
@@ -10911,15 +10687,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
   gg.util.SpatialIndex = (function() {
 
     function SpatialIndex(keyf, valf) {
-      var _ref, _ref1;
       this.keyf = keyf != null ? keyf : null;
       this.valf = valf != null ? valf : null;
-      if ((_ref = this.keyf) == null) {
+      if (this.keyf == null) {
         this.keyf = (function(box) {
           return box;
         });
       }
-      if ((_ref1 = this.valf) == null) {
+      if (this.valf == null) {
         this.valf = (function(box) {
           return box;
         });
@@ -10988,7 +10763,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     SpatialIndex.prototype.computeMetadata = function() {
-      var cellh, cellw, globalh, globalw, maxx, maxy, minboxh, minboxw, minx, miny, n, nxcells, nycells, sumboxh, sumboxw, _ref, _ref1,
+      var cellh, cellw, globalh, globalw, maxx, maxy, minboxh, minboxw, minx, miny, n, nxcells, nycells, sumboxh, sumboxw,
         _this = this;
       minx = Infinity;
       maxx = -Infinity;
@@ -11017,10 +10792,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       globalh = maxy - miny;
       cellw = Math.max(globalw / 30.0, sumboxw / n);
       cellh = Math.max(globalh / 30.0, sumboxh / n);
-      if ((_ref = this.gbounds) == null) {
+      if (this.gbounds == null) {
         this.gbounds = [[minx, maxx], [miny, maxy]];
       }
-      if ((_ref1 = this.cellsize) == null) {
+      if (this.cellsize == null) {
         this.cellsize = [cellw, cellh];
       }
       nxcells = Math.ceil(globalw / this.cellsize[0]);
@@ -11194,1030 +10969,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })();
 
-  gg.data.ColTable = (function(_super) {
-
-    __extends(ColTable, _super);
-
-    ColTable.ggpackage = "gg.data.ColTable";
-
-    function ColTable(schema, colDatas) {
-      var _ref;
-      this.schema = schema;
-      this.colDatas = colDatas != null ? colDatas : null;
-      if ((_ref = this.colDatas) == null) {
-        this.colDatas = _.times(this.schema.ncols(), function() {
-          return [];
-        });
-      }
-      this.log = gg.data.Table.log;
-    }
-
-    ColTable.prototype.nrows = function() {
-      if (this.colDatas.length === 0) {
-        return 0;
-      } else {
-        return this.colDatas[0].length;
-      }
-    };
-
-    ColTable.prototype.ncols = function() {
-      return this.colDatas.length;
-    };
-
-    ColTable.prototype.fastEach = function(f, n) {
-      var col, colidx, data, nrows, ret, row, rowidx, _i, _len, _ref;
-      if (n == null) {
-        n = null;
-      }
-      rowidx = 0;
-      nrows = this.nrows();
-      data = _.times(this.ncols(), function() {
-        return null;
-      });
-      row = new gg.data.Row(this.schema, data);
-      ret = [];
-      while (rowidx < nrows) {
-        _ref = this.colDatas;
-        for (colidx = _i = 0, _len = _ref.length; _i < _len; colidx = ++_i) {
-          col = _ref[colidx];
-          data[colidx] = col[rowidx];
-        }
-        ret.push(f(row, rowidx));
-        rowidx += 1;
-        if ((n != null) && rowidx >= n) {
-          break;
-        }
-      }
-      return ret;
-    };
-
-    ColTable.prototype.cloneShallow = function() {
-      var cols;
-      cols = _.map(this.colDatas, function(col) {
-        return _.clone(col);
-      });
-      return new gg.data.ColTable(this.schema.clone(), cols);
-    };
-
-    ColTable.prototype.cloneDeep = function() {
-      return this.cloneShallow();
-    };
-
-    ColTable.prototype._addColumn = function(col, vals) {
-      if (!this.has(col)) {
-        throw Error("col should be in the schema: " + col);
-      }
-      this.colDatas[this.schema.index(col)] = vals;
-      return this;
-    };
-
-    ColTable.prototype._getColumn = function(col) {
-      return this.colDatas[this.schema.index(col)];
-    };
-
-    ColTable.prototype._rmColumn = function(col) {
-      var idx;
-      if (!this.has(col)) {
-        return this;
-      }
-      idx = this.schema.index(col);
-      this.colDatas.splice(idx, 1);
-      this.schema = this.schema.exclude(col);
-      return this;
-    };
-
-    ColTable.prototype.addRow = function(row, pad) {
-      var col, idx, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2;
-      if (pad == null) {
-        pad = false;
-      }
-      if (row == null) {
-        throw Error("adding null row");
-      }
-      if (_.isArray(row)) {
-        if (row.length !== this.schema.ncols()) {
-          if (row.length > this.schema.ncols() || !pad) {
-            throw Error("row len wrong: " + row.length + " != " + this.schema.length);
-          }
-          _ref = _.range(this.schema.ncols());
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            idx = _ref[_i];
-            if (idx <= row.length) {
-              this.colDatas[idx].push(row[idx]);
-            } else {
-              this.colDatas[idx].push(null);
-            }
-          }
-        }
-      } else if (_.isType(row, gg.data.Row)) {
-        _ref1 = this.cols();
-        for (idx = _j = 0, _len1 = _ref1.length; _j < _len1; idx = ++_j) {
-          col = _ref1[idx];
-          this.colDatas[this.schema.index(col)].push(row.get(col));
-        }
-      } else if (_.isObject(row)) {
-        _ref2 = this.cols();
-        for (idx = _k = 0, _len2 = _ref2.length; _k < _len2; idx = ++_k) {
-          col = _ref2[idx];
-          this.colDatas[this.schema.index(col)].push(row[col]);
-        }
-      } else {
-        throw Error("row type(" + row.constructor.name + ") not supported");
-      }
-      return this;
-    };
-
-    ColTable.prototype.get = function(idx, col) {
-      var rowdata;
-      if (col == null) {
-        col = null;
-      }
-      if (col != null) {
-        if (this.schema.has(col)) {
-          return this.colDatas[this.schema.index(col)][idx];
-        } else {
-          throw Error("col " + col + " not in schema: " + (this.schema.toString()));
-        }
-      } else {
-        rowdata = _.map(this.colDatas, function(coldata) {
-          return coldata[idx];
-        });
-        return new gg.data.Row(this.schema, rowdata);
-      }
-    };
-
-    ColTable.prototype.raw = function() {
-      var _this = this;
-      return _.times(this.nrows(), function(i) {
-        return _.o2map(_this.schema.cols, function(col) {
-          return [col, _this.colDatas[_this.schema.index(col)][i]];
-        });
-      });
-    };
-
-    ColTable.prototype.serialize = function() {
-      var colDatas;
-      colDatas = _.map(this.colDatas, function(cd) {
-        return _.map(cd, _.toJSON);
-      });
-      return JSON.stringify({
-        data: JSON.stringify(colDatas),
-        schema: JSON.stringify(this.schema.toJSON()),
-        type: 'col'
-      });
-    };
-
-    ColTable.deserialize = function(json) {
-      var colDatas, schema, t;
-      colDatas = JSON.parse(json.data);
-      colDatas = _.map(colDatas, function(cd) {
-        return _.map(cd, _.fromJSON);
-      });
-      schema = gg.data.Schema.fromJSON(JSON.parse(json.schema));
-      t = new gg.data.ColTable(schema);
-      t.colDatas = colDatas;
-      return t;
-    };
-
-    ColTable.fromArray = function(rows, schema) {
-      var col, cols, idx, row, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1;
-      if (schema == null) {
-        schema = null;
-      }
-      if (schema == null) {
-        schema = gg.data.Schema.infer(rows);
-      }
-      cols = _.times(schema.ncols(), function() {
-        return [];
-      });
-      if ((rows != null) && _.isType(rows[0], gg.data.Row)) {
-        for (_i = 0, _len = rows.length; _i < _len; _i++) {
-          row = rows[_i];
-          _ref = schema.cols;
-          for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-            col = _ref[_j];
-            idx = schema.index(col);
-            cols[idx].push(row.get(col));
-          }
-        }
-      } else {
-        for (_k = 0, _len2 = rows.length; _k < _len2; _k++) {
-          row = rows[_k];
-          _ref1 = schema.cols;
-          for (_l = 0, _len3 = _ref1.length; _l < _len3; _l++) {
-            col = _ref1[_l];
-            if (col in row) {
-              cols[schema.index(col)].push(row[col]);
-            } else {
-              cols[schema.index(col)].push(null);
-            }
-          }
-        }
-      }
-      return new gg.data.ColTable(schema, cols);
-    };
-
-    ColTable.fromJSON = function(json) {
-      var raw, raws, schema, t, _i, _len;
-      schema = gg.data.Schema.fromJSON(json.schema);
-      t = new gg.data.ColTable(schema);
-      raws = _.fromJSON(json.data);
-      for (_i = 0, _len = raws.length; _i < _len; _i++) {
-        raw = raws[_i];
-        t.addRow(raw);
-      }
-      return t;
-    };
-
-    return ColTable;
-
-  })(gg.data.Table);
-
-  gg.data.PairTable = (function() {
-
-    function PairTable(table, md) {
-      var _ref, _ref1,
-        _this = this;
-      this.table = table != null ? table : null;
-      this.md = md != null ? md : null;
-      if ((_ref = this.table) == null) {
-        this.table = new gg.data.RowTable(new gg.data.Schema());
-      }
-      if ((_ref1 = this.md) == null) {
-        this.md = new gg.data.RowTable(new gg.data.Schema());
-      }
-      this.tableOnlyCols = _.filter(this.cols, function(col) {
-        return _this.table.has(col) && !_this.md.has(col);
-      });
-      this.mdOnlyCols = _.filter(this.cols, function(col) {
-        return !_this.table.has(col) && _this.md.has(col);
-      });
-      this.types = _.map(this.sharedCols, function(col) {
-        return _this.table.schema.type(col);
-      });
-      this.schema = new gg.data.Schema(this.sharedCols, this.types);
-      this.log = gg.util.Log.logger(this.constructor.ggpackage, 'pairtable');
-    }
-
-    PairTable.prototype.sharedCols = function() {
-      var cols, mSchema, sharedCols, tSchema,
-        _this = this;
-      tSchema = this.tableSchema();
-      mSchema = this.mdSchema();
-      cols = _.uniq(_.flatten([tSchema.cols, mSchema.cols]));
-      sharedCols = _.filter(cols, function(col) {
-        return tSchema.has(col) && mSchema.has(col) && (tSchema.type(col) === mSchema.type(col));
-      });
-      return sharedCols;
-    };
-
-    PairTable.prototype.partition = function(joincols, type) {
-      var ps;
-      if (type == null) {
-        type = 'outer';
-      }
-      joincols = _.flatten([joincols]);
-      ps = gg.data.Transform.partitionJoin(this.getTable(), this.getMD(), joincols);
-      return _.map(ps, function(o) {
-        var p;
-        p = o['table'];
-        return p;
-      });
-    };
-
-    PairTable.prototype.fullPartition = function(type) {
-      var klass, partitions,
-        _this = this;
-      if (type == null) {
-        type = 'outer';
-      }
-      klass = this.getMD().klass();
-      partitions = this.partition(this.sharedCols());
-      partitions = _.map(partitions, function(p) {
-        var md, row, table;
-        table = p.getTable();
-        md = p.getMD();
-        if (table.nrows() === 0) {
-          if (table.schema.cols.length === 0 && _this.tableSchema().cols.length > 0) {
-            console.log(table);
-            console.log(md);
-            console.log(_this);
-            throw Error("full partition created diff schemas");
-          }
-        }
-        if (md.nrows() === 0) {
-          row = new gg.data.Row(_this.mdSchema().clone());
-          row = row.merge(table.get(0).project(_this.sharedCols()));
-          md = klass.fromArray([row], _this.mdSchema().clone());
-          return new gg.data.PairTable(table, md);
-        } else if (md.nrows() > 1) {
-          return p;
-        } else {
-          return p;
-        }
-      });
-      return partitions;
-    };
-
-    PairTable.prototype.ensure = function(cols) {
-      var col, createCopy, keyrow, keyschema, klass, md, newMdSchema, newmd, newpartitions, p, ps, restCols, rows, sharedCols, sp, subpartitions, t, unknownCols, _i, _j, _k, _len, _len1, _len2, _ref,
-        _this = this;
-      if (cols == null) {
-        cols = [];
-      }
-      cols = _.flatten([cols]);
-      sharedCols = _.filter(cols, function(col) {
-        return _this.md.schema.has(col);
-      });
-      restCols = _.reject(cols, function(col) {
-        return _this.md.schema.has(col);
-      });
-      unknownCols = _.reject(restCols, function(col) {
-        return _this.table.schema.has(col);
-      });
-      restCols = _.filter(restCols, function(col) {
-        return _this.table.schema.has(col);
-      });
-      if (unknownCols.length > 0) {
-        this.log.warn("ensure dropping unknown cols: " + unknownCols);
-      }
-      klass = this.getMD().klass();
-      newMdSchema = this.mdSchema();
-      newMdSchema.merge(this.tableSchema().project(restCols));
-      ps = this.partition(sharedCols);
-      newpartitions = [];
-      for (_i = 0, _len = ps.length; _i < _len; _i++) {
-        p = ps[_i];
-        t = p.getTable();
-        md = p.getMD();
-        if (md.nrows() > 0) {
-          createCopy = function() {
-            return md.fastEach(function(row) {
-              return row.clone();
-            });
-          };
-        } else if (this.md.nrows() > 0) {
-          createCopy = function() {
-            return [_this.md.get(0).clone()];
-          };
-        } else {
-          createCopy = function() {
-            return [new gg.data.Row(new gg.data.Schema())];
-          };
-        }
-        subpartitions = t.partition(restCols);
-        for (_j = 0, _len1 = subpartitions.length; _j < _len1; _j++) {
-          sp = subpartitions[_j];
-          keyschema = sp.schema.project(restCols);
-          keyrow = new gg.data.Row(keyschema);
-          _ref = keyschema.cols;
-          for (_k = 0, _len2 = _ref.length; _k < _len2; _k++) {
-            col = _ref[_k];
-            keyrow.set(col, sp.get(0, col));
-          }
-          rows = _.map(createCopy(), function(row) {
-            return row.merge(keyrow);
-          });
-          newmd = klass.fromArray(rows, newMdSchema);
-          newpartitions.push(new gg.data.PairTable(sp, newmd));
-        }
-      }
-      return new gg.data.TableSet(newpartitions);
-    };
-
-    PairTable.prototype.tableSchema = function() {
-      return this.table.schema;
-    };
-
-    PairTable.prototype.mdSchema = function() {
-      return this.md.schema;
-    };
-
-    PairTable.prototype.getTable = function() {
-      return this.table;
-    };
-
-    PairTable.prototype.getMD = function() {
-      return this.md;
-    };
-
-    PairTable.prototype.clone = function() {
-      return new gg.data.PairTable(this.getTable().clone(), this.getMD().clone());
-    };
-
-    return PairTable;
-
-  })();
-
-  gg.data.MultiTable = (function(_super) {
-
-    __extends(MultiTable, _super);
-
-    MultiTable.ggpackage = "gg.data.MultiTable";
-
-    function MultiTable(schema, tables) {
-      this.schema = schema;
-      this.tables = tables != null ? tables : [];
-      this.log = gg.data.Table.log;
-      this.tables = _.compact(this.tables);
-      if (this.schema == null) {
-        if (this.tables.length > 0) {
-          this.schema = gg.data.Schema.merge(_.map(this.tables, function(t) {
-            return t.schema;
-          }));
-        } else {
-          this.schema = new gg.data.Schema();
-        }
-      }
-    }
-
-    MultiTable.prototype.nrows = function() {
-      return _.sum(this.tables, function(t) {
-        return t.nrows();
-      });
-    };
-
-    MultiTable.prototype.klass = function() {
-      if (this.tables.length > 0) {
-        return this.tables[0].klass();
-      } else {
-        return gg.data.ColTable;
-      }
-    };
-
-    MultiTable.prototype.cloneShallow = function() {
-      var ts;
-      ts = _.map(this.tables, function(t) {
-        return t.cloneShallow();
-      });
-      return new gg.data.MultiTable(this.schema.clone(), ts);
-    };
-
-    MultiTable.prototype.cloneDeep = function() {
-      var ts;
-      ts = _.map(this.tables, function(t) {
-        return t.cloneDeep();
-      });
-      return new gg.data.MultiTable(this.schema.clone(), ts);
-    };
-
-    MultiTable.prototype.setColumn = function(col, val, type) {
-      var tables;
-      if (type == null) {
-        type = null;
-      }
-      tables = _.map(this.tables, function(t) {
-        return t.setColumn(col, val, type);
-      });
-      return new gg.data.MultiTable(null, tables);
-    };
-
-    MultiTable.prototype.addColumn = function(col, vals, type, overwrite) {
-      var offset, tables;
-      if (type == null) {
-        type = null;
-      }
-      if (overwrite == null) {
-        overwrite = false;
-      }
-      if (vals.length !== this.nrows()) {
-        throw Error("values not same length as table: " + vals.length + " != " + (this.nrows()));
-      }
-      offset = 0;
-      tables = _.map(this.tables, function(t) {
-        var subvals;
-        subvals = vals.slice(offset, offset + t.nrows());
-        t.addColumn(col, subvals, type, overwrite);
-        offset += t.nrows();
-        return t;
-      });
-      return new gg.data.MultiTable(null, tables);
-    };
-
-    MultiTable.prototype.rmColumn = function(col) {
-      var tables;
-      tables = _.map(this.tables, function(t) {
-        return t.rmColumn(col);
-      });
-      return new gg.data.MultiTable(null, tables);
-    };
-
-    MultiTable.prototype.addRow = function(row) {
-      row = gg.data.Row.toRow(row);
-      if (this.tables.length === 0) {
-        this.tables.push(new gg.data.RowTable(row.schema.clone()));
-      }
-      _.last(this.tables).addRow(row);
-      return this;
-    };
-
-    MultiTable.prototype.get = function(idx, col) {
-      var t, tidx, _i, _len, _ref;
-      if (col == null) {
-        col = null;
-      }
-      _ref = this.tables;
-      for (tidx = _i = 0, _len = _ref.length; _i < _len; tidx = ++_i) {
-        t = _ref[tidx];
-        if (idx < t.nrows()) {
-          return t.get(idx, col);
-        }
-        idx -= t.nrows();
-      }
-    };
-
-    MultiTable.prototype._getColumn = function(col) {
-      var ret, t, _i, _len, _ref;
-      ret = [];
-      _ref = this.tables;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        t = _ref[_i];
-        ret.push.apply(ret, t._getColumn(col));
-      }
-      return ret;
-    };
-
-    MultiTable.prototype.serialize = function() {
-      return JSON.stringify({
-        data: JSON.stringify(_.map(this.tables, function(t) {
-          return t.serialize();
-        })),
-        type: 'multi'
-      });
-    };
-
-    MultiTable.deserialize = function(json) {
-      var data, tables;
-      data = JSON.parse(json.data);
-      tables = _.map(data, function(j) {
-        return gg.data.Table.deserialize(j);
-      });
-      return new gg.data.MultiTable(null, tables);
-    };
-
-    MultiTable.prototype.raw = function() {
-      var ret, t, _i, _len, _ref;
-      ret = [];
-      _ref = this.tables;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        t = _ref[_i];
-        ret.push.apply(ret, t.raw());
-      }
-      return ret;
-    };
-
-    MultiTable.fromJSON = function(json) {
-      return gg.data.RowTable.fromJSON(json);
-    };
-
-    return MultiTable;
-
-  })(gg.data.Table);
-
-  gg.data.SchemaMap = (function() {
-
-    function SchemaMap() {}
-
-    SchemaMap.transform = function(source, tSchema) {
-      var arr_keys, arrs, flattened, gbFunc, group, groupdata, groups, inSourceArray, inTargetArray, rowData, sSchema, source_all, source_array, source_nonarray, subtable, target, target_all, target_array, target_nonarray, _i, _len,
-        _this = this;
-      sSchema = source.schema;
-      target = new gg.data.RowTable(tSchema);
-      inSourceArray = function() {
-        var args;
-        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-        return sSchema.inArray.apply(sSchema, args);
-      };
-      inTargetArray = function() {
-        var args;
-        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-        return tSchema.inArray.apply(tSchema, args);
-      };
-      source_all = sSchema.leafAttrs();
-      source_nonarray = _.reject(source_all, inSourceArray);
-      source_array = _.filter(source_all, inSourceArray);
-      target_all = tSchema.leafAttrs();
-      target_nonarray = _.reject(target_all, inTargetArray);
-      target_array = _.filter(target_all, inTargetArray);
-      if (_.any(target_all, function(tAttr) {
-        return __indexOf.call(source_all, tAttr) < 0;
-      })) {
-        throw Error("Can't map ??? -> " + tAttr);
-      }
-      arr_keys = _.uniq(_.map(target_array, function(attr) {
-        return tSchema.attrToKeys[attr];
-      }));
-      flattened = source.flatten(null, true);
-      gbFunc = function(row) {
-        return _.o2map(target_nonarray, function(attr) {
-          return [attr, row.get(attr)];
-        });
-      };
-      groups = flattened.split(gbFunc);
-      for (_i = 0, _len = groups.length; _i < _len; _i++) {
-        group = groups[_i];
-        subtable = group.table;
-        groupdata = group.key;
-        rowData = {};
-        _.each(group.key, function(val, attr) {
-          var nestKey;
-          if (tSchema.isNested(attr)) {
-            if (!(attr in rowData)) {
-              return rowData[attr] = {};
-            }
-          } else if (tSchema.inNested(attr)) {
-            nestKey = tSchema.attrToKeys[attr];
-            if (!(nestKey in rowData)) {
-              rowData[nestKey] = {};
-            }
-            return rowData[nestKey][attr] = val;
-          } else {
-            return rowData[attr] = val;
-          }
-        });
-        arrs = _.o2map(arr_keys, function(arr_key) {
-          return [arr_key, []];
-        });
-        subtable.each(function(subrow) {
-          var arr, arr_key, key, _j, _len1, _results;
-          _.each(arrs, function(arr, k) {
-            return arr.push({});
-          });
-          _results = [];
-          for (_j = 0, _len1 = target_array.length; _j < _len1; _j++) {
-            key = target_array[_j];
-            if (subrow.contains(key)) {
-              arr_key = tSchema.attrToKeys[key];
-              arr = arrs[arr_key];
-              _results.push(_.last(arr)[key] = subrow.get(key));
-            } else {
-              _results.push(void 0);
-            }
-          }
-          return _results;
-        });
-        _.extend(rowData, arrs);
-        target.addRow(rowData);
-      }
-      return target;
-    };
-
-    return SchemaMap;
-
-  })();
-
-  gg.data.TableSet = (function(_super) {
-
-    __extends(TableSet, _super);
-
-    function TableSet(pairtables) {
-      this.pairtables = pairtables;
-    }
-
-    TableSet.prototype.checkSchema = function(cols) {
-      var col, schema, _i, _j, _len, _len1, _ref;
-      _ref = this.schemas();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        schema = _ref[_i];
-        for (_j = 0, _len1 = cols.length; _j < _len1; _j++) {
-          col = cols[_j];
-          if (!schema.has(col)) {
-            return false;
-          }
-        }
-      }
-      return true;
-    };
-
-    TableSet.prototype.ensure = function(cols) {
-      return new gg.data.PairTable(this.getTable(), this.getMD()).ensure(cols);
-    };
-
-    TableSet.prototype.tableSchema = function() {
-      return gg.data.Schema.merge(_.map(this.pairtables, function(pt) {
-        return pt.tableSchema();
-      }));
-    };
-
-    TableSet.prototype.mdSchema = function() {
-      return gg.data.Schema.merge(_.map(this.pairtables, function(pt) {
-        return pt.mdSchema();
-      }));
-    };
-
-    TableSet.prototype.getTable = function() {
-      var tables;
-      tables = _.map(this.pairtables, function(pt) {
-        return pt.getTable();
-      });
-      return new gg.data.MultiTable(null, tables);
-    };
-
-    TableSet.prototype.getMD = function() {
-      var tables;
-      tables = _.map(this.pairtables, function(pt) {
-        return pt.getMD();
-      });
-      return new gg.data.MultiTable(null, tables);
-    };
-
-    return TableSet;
-
-  })(gg.data.PairTable);
-
-  gg.data.Transform = (function() {
-
-    function Transform() {}
-
-    Transform.cross = function(cols, tabletype) {
-      var rows;
-      if (tabletype == null) {
-        tabletype = null;
-      }
-      rows = this.cross_(cols);
-      return gg.data.Table.fromArray(rows, null, tabletype);
-    };
-
-    Transform.cross_ = function(cols, tabletype) {
-      var col, data, idx, row, rows, subrow, v, _i, _j, _len, _len1, _ref;
-      if (tabletype == null) {
-        tabletype = null;
-      }
-      if (_.size(cols) === 0) {
-        return [{}];
-      }
-      rows = [];
-      col = _.first(_.keys(cols));
-      data = cols[col];
-      cols = _.omit(cols, col);
-      for (idx = _i = 0, _len = data.length; _i < _len; idx = ++_i) {
-        v = data[idx];
-        _ref = this.cross_(cols);
-        for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-          subrow = _ref[_j];
-          row = {};
-          row[col] = v;
-          _.extend(row, subrow);
-          rows.push(row);
-        }
-      }
-      return rows;
-    };
-
-    Transform.sort = function(table, cmp) {
-      var klass, newtable, rows;
-      rows = table.each(function(row) {
-        return row;
-      });
-      rows.sort(cmp);
-      klass = table.klass();
-      newtable = new klass(table.schema);
-      _.each(rows, function(row) {
-        return newtable.addRow(row);
-      });
-      return newtable;
-    };
-
-    Transform.sortOn = function(table, cols, reverse) {
-      var cmp, getval;
-      if (reverse == null) {
-        reverse = false;
-      }
-      cols = _.flatten([cols]);
-      getval = function(row) {
-        return _.map(cols, function(col) {
-          return row.get(col);
-        });
-      };
-      reverse = reverse ? -1 : 1;
-      return cmp = function(r1, r2) {
-        var col, _i, _len;
-        for (_i = 0, _len = cols.length; _i < _len; _i++) {
-          col = cols[_i];
-          if (!(r1.has(col) && r2.has(col))) {
-            continue;
-          }
-          if (r1.get(col) > r2.get(col)) {
-            return 1 * reverse;
-          }
-          if (r1.get(col) < r2.get(col)) {
-            return -1 * reverse;
-          }
-        }
-        return 0;
-      };
-    };
-
-    Transform.buildHT = function(t, cols) {
-      var getkey, ht, keys;
-      getkey = function(row) {
-        return _.map(cols, function(col) {
-          return row.get(col);
-        });
-      };
-      ht = {};
-      keys = {};
-      t.fastEach(function(row) {
-        var key, strkey;
-        key = getkey(row);
-        strkey = JSON.stringify(key);
-        if (!(strkey in ht)) {
-          ht[strkey] = [];
-        }
-        ht[strkey].push(row.raw());
-        return keys[strkey] = key;
-      });
-      return [ht, keys];
-    };
-
-    Transform.split = function(table, splitcols) {
-      var ht, keys, klass, _ref;
-      splitcols = _.flatten([splitcols]);
-      klass = table.klass();
-      _ref = this.buildHT(table, splitcols), ht = _ref[0], keys = _ref[1];
-      return _.map(ht, function(rows, k) {
-        return {
-          key: keys[k],
-          table: klass.fromArray(rows, table.schema.clone())
-        };
-      });
-    };
-
-    Transform.partition = function() {
-      var args;
-      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-      return this.split.apply(this, args);
-    };
-
-    Transform.filter = function(table, f) {
-      var klass, newt;
-      klass = table.klass();
-      newt = new klass(table.schema.clone());
-      table.each(function(row, idx) {
-        if (f(row, idx)) {
-          return newt.addRow(row);
-        }
-      });
-      return newt;
-    };
-
-    Transform.exclude = function(table, cols) {
-      var colDatas, keep, schema;
-      cols = _.flatten([cols]);
-      schema = table.schema.exclude(cols);
-      keep = _.reject(table.schema.cols, function(col) {
-        return __indexOf.call(cols, col) >= 0;
-      });
-      colDatas = _.map(keep, function(col) {
-        return table.getColumn(col);
-      });
-      return new gg.data.ColTable(schema, colDatas);
-    };
-
-    Transform.transform = function(table, mapping) {
-      var col, f, lookup, _i, _len, _ref;
-      lookup = _.o2map(mapping, function(_arg) {
-        var col, f, type;
-        col = _arg[0], f = _arg[1], type = _arg[2];
-        return [col, f];
-      });
-      _ref = table.schema.cols;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        if (!(col in lookup)) {
-          f = (function(col) {
-            return function(row) {
-              return row.get(col);
-            };
-          })(col);
-          mapping.push([col, f, table.schema.type(col)]);
-        }
-      }
-      return this.map(table, mapping);
-    };
-
-    Transform.mapCols = function(table, mapping) {
-      var Schema, col, f, newSchema, rows, schema, type, _i, _len, _ref;
-      Schema = gg.data.Schema;
-      mapping = _.map(_.compact(mapping), function(_arg) {
-        var col, f, type;
-        col = _arg[0], f = _arg[1], type = _arg[2];
-        if (type == null) {
-          type = f.type || Schema.unknown;
-        }
-        return [col, f, type];
-      });
-      schema = table.schema.clone();
-      schema = schema.exclude(_.map(mapping, function(_arg) {
-        var c, f, t;
-        c = _arg[0], f = _arg[1], t = _arg[2];
-        return c;
-      }));
-      newSchema = new Schema();
-      for (_i = 0, _len = mapping.length; _i < _len; _i++) {
-        _ref = mapping[_i], col = _ref[0], f = _ref[1], type = _ref[2];
-        newSchema.addColumn(col, type);
-      }
-      schema.merge(newSchema);
-      rows = table.each(function(row, idx) {
-        var raw, v, _j, _len1, _ref1;
-        raw = row.raw();
-        for (_j = 0, _len1 = mapping.length; _j < _len1; _j++) {
-          _ref1 = mapping[_j], col = _ref1[0], f = _ref1[1], type = _ref1[2];
-          v = f(raw[col], idx);
-          raw[col] = v;
-          if (idx <= 10 && schema.type(col) === Schema.unknown) {
-            schema.setType(col, Schema.type(v));
-          }
-        }
-        return raw;
-      });
-      return table.klass().fromArray(rows, schema);
-    };
-
-    Transform.map = function(table, mapping) {
-      var col, f, newrows, schema, type, _i, _len, _ref;
-      mapping = _.map(_.compact(mapping), function(_arg) {
-        var col, f, type;
-        col = _arg[0], f = _arg[1], type = _arg[2];
-        if (type == null) {
-          type = f.type || gg.data.Schema.unknown;
-        }
-        return [col, f, type];
-      });
-      schema = new gg.data.Schema();
-      for (_i = 0, _len = mapping.length; _i < _len; _i++) {
-        _ref = mapping[_i], col = _ref[0], f = _ref[1], type = _ref[2];
-        schema.addColumn(col, type);
-      }
-      newrows = table.fastEach(function(row, idx) {
-        return _.o2map(mapping, function(_arg, idx) {
-          var col, f, type, v;
-          col = _arg[0], f = _arg[1], type = _arg[2];
-          v = f(row, idx);
-          if (idx <= 10) {
-            if (schema.type(col) === gg.data.Schema.unknown) {
-              schema.setType(col, gg.data.Schema.type(v));
-            }
-          }
-          return [col, v];
-        });
-      });
-      return table.klass().fromArray(newrows, schema);
-    };
-
-    Transform.partitionJoin = function(t1, t2, joincols, type) {
-      var ht1, ht2, key, keys1, keys2, left, ret, right, rows1, rows2, schema1, schema2, strkey, strkeys, table, _i, _len, _ref, _ref1;
-      if (type == null) {
-        type = 'outer';
-      }
-      joincols = _.flatten([joincols]);
-      /*
-          unless t1.hasCols(joincols)
-            throw Error "left table doesn't have all columns: #{joincols} not in #{t1.schema.toString()}"
-          unless t2.hasCols(keys)
-            throw Error "right table doesn't have all columns: #{joincols} not in #{t2.schema.toString()}"
-      */
-
-      _ref = this.buildHT(t1, joincols), ht1 = _ref[0], keys1 = _ref[1];
-      _ref1 = this.buildHT(t2, joincols), ht2 = _ref1[0], keys2 = _ref1[1];
-      schema1 = t1.schema;
-      schema2 = t2.schema;
-      strkeys = (function() {
-        switch (type) {
-          case 'inner':
-            return _.intersection(_.keys(ht1), _.keys(ht2));
-          case 'left':
-            return _.keys(ht1);
-          case 'right':
-            return _.keys(ht2);
-          case 'outer':
-            return _.uniq(_.flatten([_.keys(ht1), _.keys(ht2)]));
-          default:
-            throw Error("invalid join type " + type);
-        }
-      })();
-      ret = [];
-      for (_i = 0, _len = strkeys.length; _i < _len; _i++) {
-        strkey = strkeys[_i];
-        rows1 = ht1[strkey];
-        rows2 = ht2[strkey];
-        left = t1.klass().fromArray(rows1, schema1.clone());
-        right = t2.klass().fromArray(rows2, schema2.clone());
-        table = new gg.data.PairTable(left, right);
-        key = strkey in keys1 ? keys1[strkey] : keys2[strkey];
-        ret.push({
-          key: key,
-          table: table
-        });
-      }
-      return ret;
-    };
-
-    return Transform;
-
-  })();
-
   try {
     events = require('events');
   } catch (error) {
@@ -12257,7 +11008,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     }
 
     Node.prototype.parseSpec = function() {
-      return this.params.ensure('keys', ['key'], null);
+      return null;
     };
 
     Node.prototype.setup = function(nParents, nChildren) {
@@ -12282,19 +11033,24 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this.inputs[idx] = input;
     };
 
-    Node.prototype.output = function(outidx, tableset) {
-      var listeners;
-      this.emit(outidx, this.id, outidx, tableset);
-      this.emit("output", this.id, outidx, tableset);
+    Node.prototype.output = function(outidx, data) {
+      var flat, listeners, n, noutputs, tablesizes;
       listeners = this.listeners(outidx);
-      return this.log.info("output: port(" + outidx + "), sizes: " + (tableset.getTable().nrows()));
-    };
-
-    Node.prototype.error = function(err) {
-      if (_.isString(err)) {
-        err = Error(err);
-      }
-      return this.emit("error", err);
+      n = listeners.length;
+      flat = gg.wf.Inputs.flatten(data)[0];
+      noutputs = flat.length;
+      tablesizes = _.map(flat, function(data) {
+        if ((data != null) && (data.table != null)) {
+          return data.table.nrows();
+        } else {
+          return -1;
+        }
+      });
+      this.log.info("output: port(" + outidx + ") ntables: " + noutputs);
+      this.log("tablesizes: " + tablesizes);
+      this.log(data);
+      this.emit(outidx, this.id, outidx, data);
+      return this.emit("output", this.id, outidx, data);
     };
 
     Node.prototype.pstore = function() {
@@ -12302,8 +11058,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Node.prototype.isBarrier = function() {
-      var _ref;
-      return (_ref = this.type) === "barrier" || _ref === 'block';
+      return this.type === "barrier";
     };
 
     Node.prototype.run = function() {
@@ -12312,31 +11067,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Node.prototype.compile = function() {
       return [this];
-    };
-
-    Node.create = function(compute, params, name) {
-      var Klass, ret;
-      if (params == null) {
-        params = {};
-      }
-      params = new gg.util.Params(params);
-      params.put('compute', compute);
-      Klass = (function(_super1) {
-
-        __extends(Klass, _super1);
-
-        function Klass() {
-          return Klass.__super__.constructor.apply(this, arguments);
-        }
-
-        return Klass;
-
-      })(this);
-      ret = new Klass({
-        name: name,
-        params: params
-      });
-      return ret;
     };
 
     Node.fromJSON = function(json) {
@@ -12350,7 +11080,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         location: json.location,
         params: gg.util.Params.fromJSON(json.params)
       };
+      console.log(spec);
       o = new klass(spec);
+      console.log(json);
       if (json.id != null) {
         o.id = json.id;
       }
@@ -12413,55 +11145,47 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this.params.ensure('compute', ['f'], null);
     };
 
-    Exec.prototype.compute = function(pairtable, params, cb) {
-      return cb(null, pairtable);
+    Exec.prototype.compute = function(data, params) {
+      return data;
     };
 
     Exec.prototype.run = function() {
-      var compute, iterator, keys, log, params, partitions, pstore, tableset,
+      var f, idx, output, outputs, params, pstore, _i, _len,
         _this = this;
       if (!this.ready()) {
         throw Error("node not ready");
       }
       params = this.params;
-      compute = this.params.get('compute') || this.compute.bind(this);
       pstore = this.pstore();
-      log = this.log;
-      tableset = new gg.data.TableSet(this.inputs);
-      keys = params.get('keys');
-      if (keys != null) {
-        this.log("partitioning on custom cols: " + keys);
-        partitions = tableset.partition(keys);
-      } else {
-        keys = tableset.sharedCols();
-        partitions = tableset.fullPartition();
-      }
-      this.log("created " + partitions.length + " partitions on cols " + keys);
-      iterator = function(pairtable, cb) {
-        try {
-          return compute(pairtable, params, cb);
-        } catch (err) {
-          return cb(err, null);
-        }
+      f = function(data, path) {
+        pstore.writeData(path, path);
+        return _this.compute(data, params);
       };
-      return async.map(partitions, iterator, function(err, pairtables) {
-        var result;
-        if (err != null) {
-          throw Error(err);
+      outputs = gg.wf.Inputs.mapLeaves(this.inputs, f);
+      for (idx = _i = 0, _len = outputs.length; _i < _len; idx = ++_i) {
+        output = outputs[idx];
+        this.output(idx, output);
+      }
+      return outputs;
+    };
+
+    Exec.create = function(params, compute) {
+      var ExecKlass;
+      ExecKlass = (function(_super1) {
+
+        __extends(ExecKlass, _super1);
+
+        function ExecKlass() {
+          return ExecKlass.__super__.constructor.apply(this, arguments);
         }
-        pairtables = _.map(pairtables, function(pt) {
-          var col, md, t, v, _i, _len;
-          md = pt.getMD();
-          t = pt.getTable();
-          for (_i = 0, _len = keys.length; _i < _len; _i++) {
-            col = keys[_i];
-            v = md.get(0, col);
-            t = t.setColumn(col, v);
-          }
-          return new gg.data.PairTable(t, md);
-        });
-        result = new gg.data.TableSet(pairtables);
-        return _this.output(0, result);
+
+        ExecKlass.prototype.compute = compute;
+
+        return ExecKlass;
+
+      })(gg.wf.Exec);
+      return new ExecKlass({
+        params: params
       });
     };
 
@@ -12469,87 +11193,34 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.wf.Node);
 
-  gg.wf.SyncExec = (function(_super) {
-
-    __extends(SyncExec, _super);
-
-    function SyncExec() {
-      return SyncExec.__super__.constructor.apply(this, arguments);
-    }
-
-    SyncExec.prototype.parseSpec = function() {
-      var compute, f, name;
-      SyncExec.__super__.parseSpec.apply(this, arguments);
-      f = this.params.get('compute');
-      if (f == null) {
-        f = this.compute.bind(this);
-      }
-      name = this.name;
-      compute = function(pairtable, params, cb) {
-        var res;
-        try {
-          res = f(pairtable, params, function() {
-            throw Error("SyncExec should not call callback");
-          });
-          return cb(null, res);
-        } catch (err) {
-          console.log("error in syncexec: " + name);
-          console.log(err.toString());
-          return cb(err, null);
-        }
-      };
-      return this.params.put('compute', compute);
-    };
-
-    SyncExec.prototype.compute = function(pairtable, params, cb) {
-      return pairtable;
-    };
-
-    return SyncExec;
-
-  })(gg.wf.Exec);
-
   gg.core.XForm = (function(_super) {
 
     __extends(XForm, _super);
+
+    function XForm() {
+      return XForm.__super__.constructor.apply(this, arguments);
+    }
 
     XForm.ggpackage = 'gg.core.XForm';
 
     XForm.log = gg.util.Log.logger(XForm.ggpackage, XForm.ggpackage.substr(XForm.ggpackage.lastIndexOf(".") + 1));
 
-    function XForm(spec) {
-      this.spec = spec != null ? spec : {};
-      this.premap = this.postmap = null;
-      XForm.__super__.constructor.apply(this, arguments);
-    }
-
     XForm.prototype.parseSpec = function() {
-      var compute, log, mapSpec, postmapSpec;
-      if (_.findGoodAttr(this.spec, gg.xform.Mapper.attrs, null) != null) {
-        mapSpec = _.clone(this.spec);
-        this.premap = gg.xform.Mapper.fromSpec(mapSpec);
-      }
-      if (this.spec.postmap != null) {
-        postmapSpec = {
-          aes: this.spec.postmap
-        };
-        this.postmap = gg.xform.Mapper.fromSpec(this.spec.postmap);
-      }
+      var compute,
+        _this = this;
+      this.log("XForm spec: " + (JSON.stringify(this.spec)));
       this.params.putAll({
         inputSchema: this.extractAttr("inputSchema"),
         outputSchema: this.extractAttr("outputSchema"),
         defaults: this.extractAttr("defaults")
       });
       this.params.ensure("klassname", [], this.constructor.ggpackage);
-      compute = this.params.get('compute') || this.compute.bind(this);
-      log = this.log.bind(this);
-      this.compute = function(pt, params) {
-        pt = gg.core.FormUtil.addDefaults(pt, params, log);
-        gg.core.FormUtil.validateInput(pt, params, log);
-        log("running xform compute");
-        return compute(pt, params);
+      compute = this.spec.f || this.compute.bind(this);
+      return this.compute = function(data, params) {
+        gg.core.FormUtil.addDefaults(data, params, _this.log);
+        gg.core.FormUtil.validateInput(data, params, _this.log);
+        return compute(data, params);
       };
-      return XForm.__super__.parseSpec.apply(this, arguments);
     };
 
     XForm.prototype.extractAttr = function(attr, spec) {
@@ -12570,359 +11241,51 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return val;
     };
 
-    XForm.prototype.ensureScales = function(pairtable, params) {
-      return gg.core.FormUtil.ensureScales(pairtable, params, this.log);
-    };
-
-    XForm.prototype.scales = function(pairtable, params) {
-      return gg.core.FormUtil.scales(pairtable, params, this.log);
-    };
-
-    XForm.prototype.defaults = function(pt, params) {
+    XForm.prototype.defaults = function(data, params) {
       return {};
     };
 
-    XForm.prototype.inputSchema = function(pt, params) {
+    XForm.prototype.inputSchema = function(data, params) {
       return [];
     };
 
-    XForm.prototype.outputSchema = function(pt, params) {
-      return pt.tableSchema();
+    XForm.prototype.outputSchema = function(data, params) {
+      return data.table.schema;
     };
 
-    XForm.prototype.compile = function() {
-      var nodes;
-      nodes = [];
-      if (this.premap != null) {
-        nodes.push(this.premap.compile());
-      }
-      nodes.push(XForm.__super__.compile.apply(this, arguments));
-      if (this.postmap != null) {
-        nodes.push(this.postmap.compile());
-      }
-      return _.compact(_.flatten(nodes));
+    XForm.prototype.paneInfo = function() {
+      var args, _ref;
+      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      return (_ref = gg.core.FormUtil).paneInfo.apply(_ref, args);
+    };
+
+    XForm.prototype.scales = function() {
+      var args, _ref;
+      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      return (_ref = gg.core.FormUtil).scales.apply(_ref, args);
     };
 
     return XForm;
 
-  })(gg.wf.SyncExec);
-
-  gg.xform.GroupByAnnotate = (function(_super) {
-
-    __extends(GroupByAnnotate, _super);
-
-    function GroupByAnnotate() {
-      return GroupByAnnotate.__super__.constructor.apply(this, arguments);
-    }
-
-    GroupByAnnotate.ggpackage = "gg.xform.GroupByAnnotate";
-
-    GroupByAnnotate.prototype.parseSpec = function() {
-      var gbAttrs, nBins;
-      this.log(this.params);
-      this.params.ensureAll({
-        gbAttrs: [[], []],
-        nBins: [['nBins', "nbins", "bin", "n", "nbin", "bins"], 20]
-      });
-      gbAttrs = this.params.get("gbAttrs");
-      gbAttrs = _.compact(_.flatten([gbAttrs]));
-      if (gbAttrs.length === 0) {
-        throw Error();
-      }
-      nBins = this.params.get("nBins");
-      nBins = _.times(gbAttrs.length, function() {
-        if (_.isNumber(nBins)) {
-          return nBins;
-        }
-      });
-      if (nBins.length !== gbAttrs.length) {
-        throw Error("nBins length " + nBins.length + " != gbAttrs length " + gbAttrs.length);
-      }
-      this.params.put("nBins", nBins);
-      this.log("nBins now " + (JSON.stringify(nBins)));
-      return GroupByAnnotate.__super__.parseSpec.apply(this, arguments);
-    };
-
-    GroupByAnnotate.prototype.compute = function(pairtable, params) {
-      var Transform, gbAttrs, mapping, md, nBins, origSchema, scales, table;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      origSchema = table.schema;
-      if (table.nrows() === 0) {
-        return pairtable;
-      }
-      scales = md.get(0, 'scales');
-      gbAttrs = params.get("gbAttrs");
-      nBins = params.get("nBins");
-      Transform = gg.data.Transform;
-      this.log("scales: " + (scales.toString()));
-      this.log("get mapping functions on " + gbAttrs + ", " + nBins);
-      mapping = this.constructor.getHashFuncs(gbAttrs, origSchema, nBins, scales);
-      if (_.size(mapping) > 0) {
-        table = Transform.transform(table, mapping);
-      }
-      return new gg.data.PairTable(table, md);
-    };
-
-    GroupByAnnotate.getHashFuncs = function(gbAttrs, schema, nBins, scales) {
-      return _.map(gbAttrs, function(gbAttr, idx) {
-        var domain, keyF, scale, type;
-        type = schema.type(gbAttr);
-        scale = scales.scale(gbAttr, type);
-        domain = scale.domain();
-        keyF = gg.xform.GroupByAnnotate.getHashFunc(gbAttr, type, nBins[idx], domain);
-        return [gbAttr, keyF, type];
-      });
-    };
-
-    GroupByAnnotate.getHashFunc = function(col, type, nbins, domain) {
-      var binRange, binSize, maxD, minD, toKey, _ref, _ref1;
-      toKey = function(row) {
-        return row.get(col);
-      };
-      if (nbins === -1) {
-        type = gg.data.Schema.ordinal;
-      }
-      switch (type) {
-        case gg.data.Schema.ordinal:
-          toKey = function(row) {
-            return row.get(col);
-          };
-          break;
-        case gg.data.Schema.numeric:
-          _ref = [domain[0], domain[1]], minD = _ref[0], maxD = _ref[1];
-          binRange = (maxD - minD) * 1.0;
-          binSize = Math.ceil(binRange / nbins);
-          toKey = function(row) {
-            var idx;
-            idx = Math.ceil((row.get(col) - minD) / binSize - 1);
-            idx = Math.max(0, idx);
-            return (idx * binSize) + minD + (binSize / 2);
-          };
-          break;
-        case gg.data.Schema.date:
-          domain = [domain[0].getTime(), domain[1].getTime()];
-          _ref1 = [domain[0], domain[1]], minD = _ref1[0], maxD = _ref1[1];
-          binRange = (maxD - minD) * 1.0;
-          binSize = Math.ceil(binRange / nbins);
-          toKey = function(row) {
-            var date, idx, time;
-            time = row.get(col).getTime();
-            idx = Math.ceil((time - minD) / binSize - 1);
-            idx = Math.max(0, idx);
-            date = (idx * binSize) + minD + binSize / 2;
-            return new Date(date);
-          };
-          break;
-        default:
-          throw Error("I don't support binning on col type: " + type);
-      }
-      return toKey;
-    };
-
-    return GroupByAnnotate;
-
-  })(gg.core.XForm);
-
-  gg.xform.GroupBy = (function(_super) {
-
-    __extends(GroupBy, _super);
-
-    function GroupBy() {
-      return GroupBy.__super__.constructor.apply(this, arguments);
-    }
-
-    GroupBy.ggpackage = "gg.xform.GroupBy";
-
-    GroupBy.prototype.parseSpec = function() {
-      this.log(this.params);
-      this.params.ensureAll({
-        gbAttrs: [[], []],
-        aggFuncs: [["agg", "aggs"], {}],
-        nBins: [["nbins", "bin", "n", "nbin", "bins"], 20]
-      });
-      this.annotate = new gg.xform.GroupByAnnotate({
-        name: "" + this.name + "-anno",
-        params: {
-          gbAttrs: this.params.get('gbAttrs'),
-          nBins: this.params.get('nBins')
-        }
-      });
-      return GroupBy.__super__.parseSpec.apply(this, arguments);
-    };
-
-    GroupBy.prototype.compile = function() {
-      var nodes;
-      nodes = GroupBy.__super__.compile.apply(this, arguments);
-      nodes.unshift(this.annotate.compile());
-      return nodes;
-    };
-
-    GroupBy.prototype.inputSchema = function(pairtable, params) {
-      return params.get("gbAttrs");
-    };
-
-    GroupBy.prototype.outputSchema = function(pairtable, params) {
-      var agg, aggFuncs, aggName, gbAttrs, newSchema, schema, spec;
-      gbAttrs = params.get("gbAttrs");
-      aggFuncs = params.get("aggFuncs");
-      schema = pairtable.tableSchema().clone();
-      spec = {};
-      for (aggName in aggFuncs) {
-        agg = aggFuncs[aggName];
-        spec[aggName] = gg.data.Schema.numeric;
-      }
-      newSchema = gg.data.Schema.fromJSON(spec);
-      return schema.merge(newSchema);
-    };
-
-    GroupBy.prototype.compute = function(pairtable, params) {
-      var gbAttrs, md, newtable, outputSchema, p, partitions, rows, table, _i, _len;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      gbAttrs = params.get("gbAttrs");
-      partitions = table.partition(gbAttrs);
-      rows = [];
-      for (_i = 0, _len = partitions.length; _i < _len; _i++) {
-        p = partitions[_i];
-        rows.push.apply(rows, this.udf(p, params));
-      }
-      outputSchema = params.get('outputSchema')(pairtable, params);
-      newtable = gg.data.Table.fromArray(rows, outputSchema);
-      return new gg.data.PairTable(newtable, md);
-    };
-
-    GroupBy.prototype.udf = function(table, params) {
-      var aggFuncs;
-      aggFuncs = params.get('aggFuncs');
-      return gg.xform.GroupBy.aggregatePartition(aggFuncs, table);
-    };
-
-    GroupBy.aggregatePartition = function(aggFuncs, table) {
-      var aggVals, row;
-      aggVals = _.o2map(aggFuncs, function(spec, name) {
-        var agg, v;
-        agg = gg.xform.Aggregate.fromSpec(spec);
-        v = agg.compute(table);
-        return [name, v];
-      });
-      row = table.get(0).raw();
-      _.extend(row, aggVals);
-      return [row];
-    };
-
-    return GroupBy;
-
-  })(gg.core.XForm);
-
-  gg.geom.reparam.Point = (function(_super) {
-
-    __extends(Point, _super);
-
-    function Point() {
-      return Point.__super__.constructor.apply(this, arguments);
-    }
-
-    Point.ggpackage = "gg.geom.reparam.Point";
-
-    Point.prototype.defaults = function() {
-      return {
-        r: 5,
-        y: 0
-      };
-    };
-
-    Point.prototype.inputSchema = function() {
-      return ['x'];
-    };
-
-    Point.prototype.outputSchema = function(pairtable) {
-      var col, schema, xtype, ytype, _i, _j, _len, _len1, _ref, _ref1;
-      schema = pairtable.tableSchema().clone();
-      xtype = schema.type('x');
-      ytype = schema.type('y');
-      _ref = ['x0', 'x1'];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        if (!schema.contains(col)) {
-          schema.addColumn(col, xtype);
-        }
-      }
-      _ref1 = ['y0', 'y1'];
-      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-        col = _ref1[_j];
-        if (!schema.contains(col)) {
-          schema.addColumn(col, ytype);
-        }
-      }
-      return schema;
-    };
-
-    Point.prototype.compute = function(pairtable, params) {
-      var mapping, md, schema, table;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      schema = params.get('outputSchema')(pairtable);
-      mapping = {
-        'y1': function(row) {
-          if (row.has('y1')) {
-            return row.get('y1');
-          } else {
-            return row.get('y');
-          }
-        },
-        'y0': function(row) {
-          if (row.has('y0')) {
-            return row.get('y0');
-          } else {
-            return 0;
-          }
-        },
-        'x0': function(row) {
-          if (row.has('x0')) {
-            return row.get('x0');
-          } else {
-            return row.get('x') - row.get('r');
-          }
-        },
-        'x1': function(row) {
-          if (row.has('y1')) {
-            return row.get('x1');
-          } else {
-            return row.get('x') + row.get('r');
-          }
-        }
-      };
-      mapping = _.map(mapping, function(f, k) {
-        return [k, f, gg.data.Schema.numeric];
-      });
-      table = gg.data.Transform.transform(table, mapping);
-      return new gg.data.PairTable(table, md);
-    };
-
-    return Point;
-
-  })(gg.core.XForm);
+  })(gg.wf.Exec);
 
   gg.geom.Render = (function(_super) {
 
     __extends(Render, _super);
 
-    Render.ggpackage = "gg.geom.Render";
-
-    function Render(spec) {
-      this.spec = spec != null ? spec : {};
-      this.spec.name = this.spec.name || ("render-" + this.constructor.name);
-      Render.__super__.constructor.apply(this, arguments);
+    function Render() {
+      return Render.__super__.constructor.apply(this, arguments);
     }
+
+    Render.ggpackage = "gg.geom.Render";
 
     Render.prototype.parseSpec = function() {
       Render.__super__.parseSpec.apply(this, arguments);
       return this.params.put("location", "client");
     };
 
-    Render.prototype.svg = function(md) {
-      return md.get(0, 'svg').pane;
+    Render.prototype.svg = function(data) {
+      return data.env.get('svg').pane;
     };
 
     Render.prototype.groups = function(g, klass, rows) {
@@ -12940,12 +11303,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return domEl;
     };
 
-    Render.prototype.compute = function(pairtable, params) {
-      var Facets, brushEventName, event, geoms, md, svg, table, write;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      svg = this.svg(md);
-      Facets = gg.facet.base.Facets;
+    Render.prototype.compute = function(data, params) {
+      var Facets, env, svg, table, write, _ref;
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+      svg = this.svg(data);
       gg.wf.Stdout.print(table, null, 2, this.log);
       this.render(table, svg);
       if (this.log.level === gg.util.Log.DEBUG) {
@@ -12955,26 +11316,18 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           }
           return _.subSvg(svg, opts, "text").text(text);
         };
-        write(md.get(0, 'facet-x'), {
+        Facets = gg.facet.base.Facets;
+        write(env.get(Facets.facetXKey), {
           dy: "1em"
         });
-        write(md.get(0, 'facet-y'), {
+        write(env.get(Facets.facetYKey), {
           dy: "2em"
         });
-        write(md.get(0, table.nrows()), {
+        write(env.get(table.nrows()), {
           dy: "3em"
         });
       }
-      geoms = svg.selectAll(".geom");
-      if (false) {
-        geoms.on("mouseover", function() {}).on("mouseout", function() {});
-      }
-      if (this.constructor.brush != null) {
-        brushEventName = "brush-" + (md.get(0, Facets.facetId));
-        event = md.get(0, "event");
-        event.on(brushEventName, this.constructor.brush(geoms));
-      }
-      return pairtable;
+      return data;
     };
 
     Render.prototype.render = function(table, rows) {
@@ -13053,478 +11406,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.geom.Render);
 
-  gg.geom.svg.Line = (function(_super) {
-
-    __extends(Line, _super);
-
-    function Line() {
-      return Line.__super__.constructor.apply(this, arguments);
-    }
-
-    Line.ggpackage = "gg.geom.svg.Line";
-
-    Line.aliases = "line";
-
-    Line.prototype.defaults = function() {
-      return {
-        "stroke-width": 1.5,
-        "stroke-opacity": 0.7,
-        stroke: "black",
-        fill: "none"
-      };
-    };
-
-    Line.prototype.inputSchema = function() {
-      return ['x', 'y', 'y1'];
-    };
-
-    Line.linesCross = function(_arg, _arg1) {
-      var d, ret, s, t, x0, x1, xp0, xp1, y0, y1, yp0, yp1;
-      x0 = _arg[0], y0 = _arg[1], x1 = _arg[2], y1 = _arg[3];
-      xp0 = _arg1[0], yp0 = _arg1[1], xp1 = _arg1[2], yp1 = _arg1[3];
-      d = xp1 * y1 - x1 * yp1;
-      if (d === 0) {
-        return false;
-      }
-      s = (1 / d) * ((x0 - xp0) * y1 - (y0 - yp0) * x1);
-      t = (1 / d) * -(-(x0 - xp0) * yp1 + (y0 - yp0) * xp1);
-      ret = s > 0 && s < 1 && t > 0 && t < 1;
-      return ret;
-    };
-
-    Line.withinBox = function(x, y, _arg) {
-      var x0, x1, y0, y1;
-      x0 = _arg[0], y0 = _arg[1], x1 = _arg[2], y1 = _arg[3];
-      return x0 <= x && x <= x1 && y0 <= y && y <= y1;
-    };
-
-    Line.lineCrossBox = function(line, box) {
-      var ret, x0, x1, xp0, xp1, y0, y1, yp0, yp1;
-      x0 = line[0], y0 = line[1], x1 = line[2], y1 = line[3];
-      xp0 = box[0], yp0 = box[1], xp1 = box[2], yp1 = box[3];
-      ret = this.withinBox(x0, y0, box) || this.withinBox(x1, y1, box) || this.linesCross(line, [xp0, yp0, xp0, yp1]) || this.linesCross(line, [xp0, yp0, xp1, yp0]) || this.linesCross(line, [xp1, yp1, xp0, yp1]) || this.linesCross(line, [xp1, yp1, xp1, yp0]);
-      return ret;
-    };
-
-    Line.brush = function(geoms) {
-      return function(_arg) {
-        var extent, maxx, maxy, minx, miny, _ref, _ref1;
-        (_ref = _arg[0], minx = _ref[0], miny = _ref[1]), (_ref1 = _arg[1], maxx = _ref1[0], maxy = _ref1[1]);
-        extent = [minx, miny, maxx, maxy];
-        return geoms.attr('stroke', function(d, i) {
-          var cur, l, line, prev, pts, row, _i, _len, _ref2;
-          l = d3.select(this);
-          row = l.data()[0];
-          pts = row.get('pts');
-          prev = _.first(pts);
-          cur = null;
-          _ref2 = _.rest(pts);
-          for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-            cur = _ref2[_i];
-            line = [prev.x, prev.y1, cur.x, cur.y1];
-            if (gg.geom.svg.Line.lineCrossBox(line, extent)) {
-              return 'black';
-            }
-            prev = cur;
-          }
-          return row.get('stroke');
-        });
-      };
-    };
-
-    Line.prototype.render = function(table, svg) {
-      var cssNormal, cssOver, enter, enterLines, exit, liner, lines, linetables, _this;
-      linetables = table.partition('group');
-      lines = this.groups(svg, 'line', linetables).selectAll('path').data(function(d) {
-        return [d];
-      });
-      enter = lines.enter();
-      enterLines = enter.append("path");
-      exit = lines.exit();
-      liner = d3.svg.line().x(function(d) {
-        return d.get('x');
-      }).y(function(d) {
-        return d.get('y1');
-      });
-      this.log("stroke is " + (table.get(0, "stroke")));
-      cssNormal = {
-        "stroke": function(g) {
-          return g.get(0, 'stroke');
-        },
-        "stroke-width": function(g) {
-          return g.get(0, "stroke-width");
-        },
-        "stroke-opacity": function(g) {
-          return g.get(0, "stroke-opacity");
-        },
-        "fill": "none"
-      };
-      cssOver = {
-        stroke: function(g) {
-          return d3.rgb(g.get(0, "fill")).darker(2);
-        },
-        "stroke-width": function(g) {
-          return g.get(0, 'stroke-width') + 1;
-        },
-        "stroke-opacity": 1
-      };
-      this.applyAttrs(enterLines, {
-        "class": "geom",
-        d: function(d) {
-          return liner(d.getRows());
-        }
-      });
-      this.applyAttrs(enterLines, cssNormal);
-      _this = this;
-      lines.on("mouseover", function(d, idx) {
-        return _this.applyAttrs(d3.select(this), cssOver);
-      }).on("mouseout", function(d, idx) {
-        return _this.applyAttrs(d3.select(this), cssNormal);
-      });
-      return exit.remove();
-    };
-
-    return Line;
-
-  })(gg.geom.Render);
-
-  gg.geom.reparam.Line = (function(_super) {
-
-    __extends(Line, _super);
-
-    function Line() {
-      return Line.__super__.constructor.apply(this, arguments);
-    }
-
-    Line.ggpackage = "gg.geom.reparam.Line";
-
-    Line.prototype.inputSchema = function() {
-      return ['x', 'y'];
-    };
-
-    Line.prototype.outputSchema = function(pairtable) {
-      var numeric, schema, xtype, ytype;
-      schema = pairtable.tableSchema();
-      numeric = gg.data.Schema.numeric;
-      xtype = schema.type('x');
-      ytype = schema.type('y');
-      return gg.data.Schema.fromJSON({
-        group: schema.type('group'),
-        x: xtype,
-        y: ytype,
-        y0: ytype,
-        y1: ytype
-      });
-    };
-
-    Line.prototype.schemaMapping = function() {
-      return {
-        y0: 'y',
-        y1: 'y'
-      };
-    };
-
-    Line.prototype.compute = function(pairtable, params) {
-      var md, scales, schema, table, y0, y0f, y1f;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      y0 = scales.scale('y', gg.data.Schema.numeric).minRange();
-      this.log("compute: y0 set to " + y0);
-      y1f = function(row) {
-        if (row.has('y1')) {
-          return row.get('y1');
-        } else {
-          return row.get('y');
-        }
-      };
-      y0f = function(row) {
-        if (row.has('y0')) {
-          return row.get('y0');
-        } else {
-          return y0;
-        }
-      };
-      table = gg.data.Transform.transform(table, [['y0', y0f, gg.data.Schema.numeric], ['y1', y1f, gg.data.Schema.numeric]]);
-      schema = params.get('outputSchema')(pairtable, params);
-      return new gg.data.PairTable(table, md);
-    };
-
-    return Line;
-
-  })(gg.core.XForm);
-
-  gg.geom.reparam.Boxplot = (function(_super) {
-
-    __extends(Boxplot, _super);
-
-    function Boxplot() {
-      return Boxplot.__super__.constructor.apply(this, arguments);
-    }
-
-    Boxplot.ggpackage = 'gg.geom.reparam.Boxplot';
-
-    Boxplot.prototype.defaults = function() {
-      return {
-        x: 1
-      };
-    };
-
-    Boxplot.prototype.inputSchema = function() {
-      return ['x', 'q1', 'median', 'q3', 'lower', 'upper', 'outlier', 'min', 'max'];
-    };
-
-    Boxplot.prototype.outputSchema = function(pairtable) {
-      var Schema, schema;
-      schema = pairtable.tableSchema();
-      Schema = gg.data.Schema;
-      return Schema.fromJSON({
-        group: schema.type('group'),
-        x: schema.type('x'),
-        x0: schema.type('x'),
-        x1: schema.type('x'),
-        width: Schema.numeric,
-        y0: Schema.numeric,
-        y1: Schema.numeric,
-        q1: Schema.numeric,
-        q3: Schema.numeric,
-        median: Schema.numeric,
-        lower: Schema.numeric,
-        upper: Schema.numeric,
-        outlier: Schema.numeric,
-        min: Schema.numeric,
-        max: Schema.numeric
-      });
-    };
-
-    Boxplot.prototype.compute = function(pairtable, params) {
-      var diffs, mapping, md, mindiff, scales, table, width, xs, yscale;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      yscale = scales.scale('y', gg.data.Schema.numeric);
-      xs = _.uniq(table.getColumn("x")).sort(d3.ascending);
-      this.log("xs: " + xs);
-      diffs = _.map(_.range(xs.length - 1), function(idx) {
-        return xs[idx + 1] - xs[idx];
-      });
-      mindiff = _.mmin(diffs || 1);
-      width = mindiff * 0.8;
-      width = Math.min(width, 40);
-      mapping = _.mappingToFunctions(table, {
-        y0: 'min',
-        y1: 'max'
-      });
-      mapping.push([
-        'x0', function(row) {
-          return row.get('x') - width / 2.0;
-        }, table.schema.type('x')
-      ]);
-      mapping.push([
-        'x1', function(row) {
-          return row.get('x') + width / 2.0;
-        }, table.schema.type('x')
-      ]);
-      table = gg.data.Transform.transform(table, mapping);
-      return new gg.data.PairTable(table, md);
-    };
-
-    return Boxplot;
-
-  })(gg.core.XForm);
-
-  gg.geom.svg.Boxplot = (function(_super) {
-
-    __extends(Boxplot, _super);
-
-    function Boxplot() {
-      return Boxplot.__super__.constructor.apply(this, arguments);
-    }
-
-    Boxplot.ggpackage = "gg.geom.svg.Boxplot";
-
-    Boxplot.aliases = ["schema", "boxplot"];
-
-    Boxplot.prototype.defaults = function() {
-      return {
-        "stroke-width": 1,
-        stroke: "steelblue",
-        fill: d3.rgb("steelblue").brighter(2),
-        "fill-opacity": 0.5
-      };
-    };
-
-    Boxplot.prototype.inputSchema = function() {
-      return ['x', 'q1', 'median', 'q3', 'lower', 'upper', 'outlier', 'min', 'max'];
-    };
-
-    Boxplot.prototype.render = function(table, svg) {
-      var boxes, boxtables, circles, enter, enterCircles, gs, height, iqr, lowert, lowerw, median, nonoutliers, uppert, upperw, width, x0, x1, y,
-        _this = this;
-      nonoutliers = table.schema.exclude('outlier');
-      boxtables = table.partition(nonoutliers.cols);
-      boxes = svg.append("g").classed('boxes geoms', true);
-      boxes = boxes.selectAll('g').data(boxtables);
-      enter = boxes.enter().append("g").attr("class", "boxplot");
-      y = function(t) {
-        return Math.min(t.get(0, 'y0'), t.get(0, 'y1'));
-      };
-      height = function(t) {
-        return Math.abs(t.get(0, 'y1') - t.get(0, 'y0'));
-      };
-      width = function(t) {
-        return t.get(0, 'x1') - t.get(0, 'x0');
-      };
-      x0 = function(t) {
-        return t.get(0, 'x0');
-      };
-      x1 = function(t) {
-        return t.get(0, 'x1');
-      };
-      iqr = this.applyAttrs(enter.append('rect'), {
-        "class": "boxplot iqr",
-        x: x0,
-        y: function(t) {
-          return Math.min(t.get(0, 'q3'), t.get(0, 'q1'));
-        },
-        width: width,
-        height: function(t) {
-          return Math.abs(t.get(0, 'q1') - t.get(0, 'q3'));
-        }
-      });
-      median = this.applyAttrs(enter.append('line'), {
-        "class": "boxplot median",
-        x1: x0,
-        x2: x1,
-        y1: function(t) {
-          return t.get(0, 'median');
-        },
-        y2: function(t) {
-          return t.get(0, 'median');
-        }
-      });
-      upperw = this.applyAttrs(enter.append("line"), {
-        "class": "boxplot whisker",
-        x1: function(t) {
-          return t.get(0, 'x');
-        },
-        x2: function(t) {
-          return t.get(0, 'x');
-        },
-        y1: function(t) {
-          return t.get(0, 'q3');
-        },
-        y2: function(t) {
-          return t.get(0, 'upper');
-        }
-      });
-      uppert = this.applyAttrs(enter.append("line"), {
-        "class": "boxplot whisker",
-        x1: function(t) {
-          return t.get(0, 'x') - width(t) * 0.2;
-        },
-        x2: function(t) {
-          return t.get(0, 'x') + width(t) * 0.2;
-        },
-        y1: function(t) {
-          return t.get(0, 'upper');
-        },
-        y2: function(t) {
-          return t.get(0, 'upper');
-        }
-      });
-      lowerw = this.applyAttrs(enter.append("line"), {
-        "class": "boxplot whisker",
-        x1: function(t) {
-          return t.get(0, 'x');
-        },
-        x2: function(t) {
-          return t.get(0, 'x');
-        },
-        y1: function(t) {
-          return t.get(0, 'q1');
-        },
-        y2: function(t) {
-          return t.get(0, 'lower');
-        }
-      });
-      lowert = this.applyAttrs(enter.append("line"), {
-        "class": "boxplot whisker",
-        x1: function(t) {
-          return t.get(0, 'x') - width(t) * 0.2;
-        },
-        x2: function(t) {
-          return t.get(0, 'x') + width(t) * 0.2;
-        },
-        y1: function(t) {
-          return t.get(0, 'lower');
-        },
-        y2: function(t) {
-          return t.get(0, 'lower');
-        }
-      });
-      circles = enter.selectAll("circle").data(function(d) {
-        return d.getRows().filter(function(row) {
-          return _.isValid(row.get('outlier'));
-        });
-      });
-      enterCircles = circles.enter().append("circle");
-      this.applyAttrs(enterCircles, {
-        "class": "boxplot outlier",
-        cx: function(t) {
-          return t.get('x');
-        },
-        cy: function(t) {
-          return t.get('outlier');
-        }
-      });
-      gs = [enter];
-      return _.each(gs, function(g) {
-        var cssOut, cssOver;
-        cssOver = {
-          "fill-opacity": 1,
-          "stroke-opacity": 1,
-          fill: function(t) {
-            return d3.rgb(t.get(0, 'fill')).darker(1);
-          },
-          stroke: function(t) {
-            return d3.rgb(t.get(0, "stroke")).darker(2);
-          },
-          "stroke-width": function(t) {
-            return t.get(0, "stroke-width") + 0.5;
-          }
-        };
-        cssOut = {
-          "fill-opacity": function(t) {
-            return t.get(0, 'fill-opacity');
-          },
-          "stroke-opacity": function(t) {
-            return t.get(0, "stroke-opacity");
-          },
-          fill: function(t) {
-            return t.get(0, 'fill');
-          },
-          stroke: function(t) {
-            return t.get(0, "stroke");
-          },
-          "stroke-width": function(t) {
-            return t.get(0, "stroke-width");
-          }
-        };
-        _this.applyAttrs(g, cssOut);
-        _this = _this;
-        return g.on("mouseover", function(d, idx) {
-          return _this.applyAttrs(d3.select(this), cssOver);
-        }).on("mouseout", function(d, idx) {
-          return _this.applyAttrs(d3.select(this), cssOut);
-        });
-      });
-    };
-
-    return Boxplot;
-
-  })(gg.geom.Render);
-
   gg.geom.svg.Rect = (function(_super) {
 
     __extends(Rect, _super);
@@ -13543,7 +11424,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         fill: "steelblue",
         stroke: "steelblue",
         "stroke-width": 1,
-        "stroke-opacity": 0.5
+        "stroke-opacity": 0.5,
+        group: 1
       };
     };
 
@@ -13551,55 +11433,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return ['x0', 'x1', 'y0', 'y1'];
     };
 
-    Rect.brush = function(geoms) {
-      var height, width, x, y;
-      x = function(t) {
-        return t.get('x0');
-      };
-      y = function(t) {
-        return Math.min(t.get('y0'), t.get('y1'));
-      };
-      height = function(t) {
-        return Math.abs(t.get('y1') - t.get('y0'));
-      };
-      width = function(t) {
-        return t.get('x1') - t.get('x0');
-      };
-      return function(_arg) {
-        var maxx, maxy, minx, miny, _ref, _ref1;
-        (_ref = _arg[0], minx = _ref[0], miny = _ref[1]), (_ref1 = _arg[1], maxx = _ref1[0], maxy = _ref1[1]);
-        return geoms.attr('fill', function(d, i) {
-          var h, r, row, valid, w, x0, x1, y0, y1, _ref2, _ref3;
-          r = d3.select(this);
-          row = r.datum();
-          x0 = x(row);
-          y0 = y(row);
-          h = height(row);
-          w = width(row);
-          x1 = x0 + w;
-          y1 = y0 + h;
-          _ref2 = [Math.min(x0, x1), Math.max(x0, x1)], x0 = _ref2[0], x1 = _ref2[1];
-          _ref3 = [Math.min(y0, y1), Math.max(y0, y1)], y0 = _ref3[0], y1 = _ref3[1];
-          valid = !(x1 < minx || x0 > maxx || y1 < miny || y0 > maxy);
-          if (valid) {
-            return 'black';
-          } else {
-            return row.get('fill');
-          }
-        });
-      };
-    };
-
     Rect.prototype.render = function(table, svg) {
-      var cssOut, cssOver, enter, enterRects, exit, height, rects, rows, width, x, y, _this;
-      rows = table.getRows();
+      var cssOut, cssOver, enter, enterRects, exit, height, rects, rows, width, y, _this;
+      rows = table.asArray();
       rects = this.agroup(svg, "intervals geoms", rows).selectAll("rect").data(rows);
       enter = rects.enter();
       exit = rects.exit();
       enterRects = enter.append("rect");
-      x = function(t) {
-        return t.get('x0');
-      };
       y = function(t) {
         return Math.min(t.get('y0'), t.get('y1'));
       };
@@ -13611,7 +11451,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       };
       this.applyAttrs(enterRects, {
         "class": "geom",
-        x: x,
+        x: function(t) {
+          return t.get('x0');
+        },
         y: y,
         width: width,
         height: height,
@@ -13638,7 +11480,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         "fill-opacity": 1
       };
       cssOut = {
-        x: x,
+        x: function(t) {
+          return t.get('x0');
+        },
         width: width,
         fill: function(t) {
           return t.get('fill');
@@ -13671,36 +11515,33 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     Rect.ggpackage = "gg.geom.reparam.Rect";
 
     Rect.prototype.parseSpec = function() {
-      this.params.put("padding", _.findGoodAttr(this.spec, ["pad", "padding"], 0.1));
-      return Rect.__super__.parseSpec.apply(this, arguments);
+      return this.params.put("padding", _.findGoodAttr(this.spec, ["pad", "padding"], 0.1));
     };
 
     Rect.prototype.inputSchema = function() {
       return ['x', 'y'];
     };
 
-    Rect.prototype.compute = function(pairtable, params) {
-      var getHeight, groups, mapping, md, minY, mindiff, padding, scales, table, width, yscale;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
+    Rect.prototype.compute = function(data, params) {
+      var env, getHeight, groups, mapping, minY, mindiff, padding, scales, table, width, yscale;
+      table = data.table;
+      env = data.env;
+      scales = env.get("scales");
       yscale = scales.scale('y', gg.data.Schema.numeric);
-      padding = 1.0 - params.get('padding');
-      groups = table.partition('group');
+      padding = 1.0 - params.get("padding");
+      groups = table.split("group");
       width = null;
       mindiff = null;
-      _.each(groups, function(subtable) {
-        var diffs, subwidth, xs;
+      _.each(groups, function(group) {
+        var diffs, subtable, subwidth, xs;
+        subtable = group.table;
         xs = _.uniq(subtable.getColumn("x")).sort(function(a, b) {
           return a - b;
         });
         diffs = _.map(_.range(xs.length - 1), function(idx) {
           return xs[idx + 1] - xs[idx];
         });
-        if (!(diffs.length > 0)) {
-          diffs = [1];
-        }
-        mindiff = _.mmin(diffs) || 1;
+        mindiff = _.mmin(diffs || 1);
         mindiff *= padding;
         subwidth = Math.max(1, mindiff);
         if (width == null) {
@@ -13715,20 +11556,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       };
       this.log("mindiff: " + mindiff + "\twidth: " + width);
       mapping = {
-        x: function(row) {
-          return row.get('x');
-        },
-        y: function(row) {
-          return row.get('y');
-        },
-        r: function(row) {
-          return row.get('r');
-        },
+        x: 'x',
+        y: 'y',
+        r: 'r',
         x0: function(row) {
-          return row.get('x0') || (row.get('x') - width / 2.0);
+          return row.get('x0') || row.get('x') - width / 2.0;
         },
         x1: function(row) {
-          return row.get('x1') || (row.get('x') + width / 2.0);
+          return row.get('x1') || row.get('x') + width / 2.0;
         },
         y0: function(row) {
           return row.get('y0') || Math.min(yscale.scale(minY), row.get('y'));
@@ -13737,14 +11572,878 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           return row.get('y1') || Math.max(yscale.scale(minY), row.get('y'));
         }
       };
-      mapping = _.map(mapping, function(f, k) {
-        return [k, f, gg.data.Schema.numeric];
-      });
-      table = gg.data.Transform.transform(table, mapping);
-      return new gg.data.PairTable(table, md);
+      mapping = _.mappingToFunctions(table, mapping);
+      table.transform(mapping, true);
+      return data;
     };
 
     return Rect;
+
+  })(gg.core.XForm);
+
+  gg.geom.reparam.Point = (function(_super) {
+
+    __extends(Point, _super);
+
+    function Point() {
+      return Point.__super__.constructor.apply(this, arguments);
+    }
+
+    Point.ggpackage = "gg.geom.reparam.Point";
+
+    Point.prototype.defaults = function() {
+      return {
+        r: 5
+      };
+    };
+
+    Point.prototype.inputSchema = function() {
+      return ['x', 'y'];
+    };
+
+    Point.prototype.outputSchema = function(data) {
+      var col, schema, table, xtype, ytype, _i, _j, _len, _len1, _ref, _ref1;
+      table = data.table;
+      schema = table.schema.clone();
+      xtype = schema.type('x');
+      ytype = schema.type('y');
+      _ref = ['x0', 'x1'];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        col = _ref[_i];
+        if (!schema.contains(col)) {
+          schema.addColumn(col, xtype);
+        }
+      }
+      _ref1 = ['y0', 'y1'];
+      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+        col = _ref1[_j];
+        if (!schema.contains(col)) {
+          schema.addColumn(col, ytype);
+        }
+      }
+      return schema;
+    };
+
+    Point.prototype.compute = function(data, params) {
+      var env, schema, table;
+      table = data.table;
+      env = data.env;
+      schema = params.get('outputSchema')(data);
+      table.each(function(row) {
+        var r, x, y;
+        r = row.get('r');
+        y = row.get('y');
+        x = row.get('x');
+        if (!row.contains('y1')) {
+          row.set('y1', y);
+        }
+        if (!row.contains('y0')) {
+          row.set('y0', 0);
+        }
+        if (!row.contains('x0')) {
+          row.set('x0', x - r);
+        }
+        if (!row.contains('x1')) {
+          return row.set('x1', x + r);
+        }
+      });
+      table.setSchema(schema);
+      return data;
+    };
+
+    return Point;
+
+  })(gg.core.XForm);
+
+  gg.geom.svg.Line = (function(_super) {
+
+    __extends(Line, _super);
+
+    function Line() {
+      return Line.__super__.constructor.apply(this, arguments);
+    }
+
+    Line.ggpackage = "gg.geom.svg.Line";
+
+    Line.aliases = "line";
+
+    Line.prototype.defaults = function() {
+      return {
+        "stroke-width": 1.5,
+        "stroke-opacity": 0.7,
+        stroke: "black",
+        fill: "none",
+        group: '1'
+      };
+    };
+
+    Line.prototype.inputSchema = function() {
+      return ['pts', 'group'];
+    };
+
+    Line.prototype.render = function(table, svg) {
+      var cssNormal, cssOver, enter, enterLines, exit, liner, lines, rows, _this;
+      rows = table.asArray();
+      lines = this.groups(svg, 'line', rows).selectAll('path').data(function(d) {
+        return [d];
+      });
+      enter = lines.enter();
+      enterLines = enter.append("path");
+      exit = lines.exit();
+      liner = d3.svg.line().x(function(d) {
+        return d.x;
+      }).y(function(d) {
+        return d.y1;
+      });
+      this.log("stroke is " + (table.get(0, "stroke")));
+      cssNormal = {
+        "stroke": function(t) {
+          return t.get("stroke");
+        },
+        "stroke-width": function(t) {
+          return t.get("stroke-width");
+        },
+        "stroke-opacity": function(t) {
+          return t.get("stroke-opacity");
+        },
+        "fill": "none"
+      };
+      cssOver = {
+        stroke: function(t) {
+          return d3.rgb(t.get("fill")).darker(2);
+        },
+        "stroke-width": function(t) {
+          return t.get('stroke-width') + 1;
+        },
+        "stroke-opacity": 1
+      };
+      this.applyAttrs(enterLines, {
+        "class": "geom",
+        d: function(d) {
+          return liner(d.get('pts'));
+        }
+      });
+      this.applyAttrs(enterLines, cssNormal);
+      _this = this;
+      lines.on("mouseover", function(d, idx) {
+        return _this.applyAttrs(d3.select(this), cssOver);
+      }).on("mouseout", function(d, idx) {
+        return _this.applyAttrs(d3.select(this), cssNormal);
+      });
+      return exit.remove();
+    };
+
+    return Line;
+
+  })(gg.geom.Render);
+
+  gg.data.SchemaMap = (function() {
+
+    function SchemaMap() {}
+
+    SchemaMap.inferMapping = function(source) {};
+
+    SchemaMap.transform = function(source, tSchema) {
+      var arr_keys, arrs, flattened, gbFunc, group, groupdata, groups, rowData, sSchema, source_all, source_array, source_nonarray, subtable, target, target_all, target_array, target_nonarray, _i, _len;
+      sSchema = source.schema;
+      target = new gg.data.RowTable(tSchema);
+      source_all = sSchema.leafAttrs();
+      source_nonarray = _.reject(source_all, sSchema.inArray.bind(sSchema));
+      source_array = _.filter(source_all, sSchema.inArray.bind(sSchema));
+      target_all = tSchema.leafAttrs();
+      target_nonarray = _.reject(target_all, tSchema.inArray.bind(tSchema));
+      target_array = _.filter(target_all, tSchema.inArray.bind(tSchema));
+      if (_.any(target_all, function(tAttr) {
+        return __indexOf.call(source_all, tAttr) < 0;
+      })) {
+        throw Error("Can't map ??? -> " + tAttr);
+      }
+      arr_keys = _.uniq(_.map(target_array, function(attr) {
+        return tSchema.attrToKeys[attr];
+      }));
+      flattened = source.flatten(null, true);
+      gbFunc = function(row) {
+        return _.o2map(target_nonarray, function(attr) {
+          return [attr, row.get(attr)];
+        });
+      };
+      groups = flattened.split(gbFunc);
+      for (_i = 0, _len = groups.length; _i < _len; _i++) {
+        group = groups[_i];
+        subtable = group.table;
+        groupdata = group.key;
+        rowData = {};
+        _.each(group.key, function(val, attr) {
+          var nestKey;
+          if (tSchema.isNested(attr)) {
+            if (!(attr in rowData)) {
+              return rowData[attr] = {};
+            }
+          } else if (tSchema.inNested(attr)) {
+            nestKey = tSchema.attrToKeys[attr];
+            if (!(nestKey in rowData)) {
+              rowData[nestKey] = {};
+            }
+            return rowData[nestKey][attr] = val;
+          } else {
+            return rowData[attr] = val;
+          }
+        });
+        arrs = _.o2map(arr_keys, function(arr_key) {
+          return [arr_key, []];
+        });
+        subtable.each(function(subrow) {
+          var arr, arr_key, key, _j, _len1, _results;
+          _.each(arrs, function(arr, k) {
+            return arr.push({});
+          });
+          _results = [];
+          for (_j = 0, _len1 = target_array.length; _j < _len1; _j++) {
+            key = target_array[_j];
+            if (subrow.contains(key)) {
+              arr_key = tSchema.attrToKeys[key];
+              arr = arrs[arr_key];
+              _results.push(_.last(arr)[key] = subrow.get(key));
+            } else {
+              _results.push(void 0);
+            }
+          }
+          return _results;
+        });
+        _.extend(rowData, arrs);
+        target.addRow(rowData);
+      }
+      return target;
+    };
+
+    return SchemaMap;
+
+  })();
+
+  gg.data.RowTable = (function(_super) {
+
+    __extends(RowTable, _super);
+
+    RowTable.ggpackage = "gg.data.RowTable";
+
+    function RowTable(schema, rows) {
+      var _this = this;
+      this.schema = schema;
+      if (rows == null) {
+        rows = [];
+      }
+      if (this.schema == null) {
+        throw Error("schema not present");
+      }
+      this.rows = [];
+      _.each(rows, function(row) {
+        return _this.addRow(row);
+      });
+      this.log = gg.data.Table.log;
+    }
+
+    RowTable.fromArray = function(rows) {
+      var schema, table;
+      schema = gg.data.Table.inferSchemaFromObjs(rows);
+      table = new gg.data.RowTable(schema, rows);
+      return table;
+    };
+
+    RowTable.toRow = function(data, schema) {
+      var row;
+      if (_.isType(data, gg.data.Row)) {
+        if (data.schema !== schema) {
+          row = data.clone();
+          row.schema = schema;
+          return row;
+        } else {
+          return data;
+        }
+      } else {
+        return new gg.data.Row(data, schema);
+      }
+    };
+
+    RowTable.prototype.setSchema = function(schema) {
+      this.each(function(row) {
+        return row.schema = schema;
+      });
+      this.schema = schema;
+      return this;
+    };
+
+    RowTable.prototype.reloadSchema = function() {
+      var rows;
+      rows = _.map(this.rows, function(row) {
+        return row.raw();
+      });
+      this.setSchema(gg.data.Table.inferSchemaFromObjs(rows));
+      return this;
+    };
+
+    RowTable.prototype.nrows = function() {
+      return this.rows.length;
+    };
+
+    RowTable.prototype.ncols = function() {
+      return this.schema.nkeys();
+    };
+
+    RowTable.prototype.colNames = function() {
+      return this.schema.attrs();
+    };
+
+    RowTable.prototype.contains = function(attr, type) {
+      return this.schema.contains(attr, type);
+    };
+
+    RowTable.prototype.cloneShallow = function() {
+      var rows;
+      rows = this.rows.map(function(row) {
+        return row;
+      });
+      return new gg.data.RowTable(this.schema.clone(), rows);
+    };
+
+    RowTable.prototype.cloneDeep = function() {
+      var rows,
+        _this = this;
+      rows = this.rows.map(function(row) {
+        return row.clone();
+      });
+      return new gg.data.RowTable(this.schema.clone(), rows);
+    };
+
+    RowTable.prototype.sort = function(cmp, update) {
+      var clone;
+      if (update == null) {
+        update = true;
+      }
+      if (update) {
+        this.rows.sort(cmp);
+        return this;
+      } else {
+        clone = this.clone();
+        return clone.sort(cmp, true);
+      }
+    };
+
+    RowTable.prototype.merge = function(table) {
+      if (_.isSubclass(table, gg.data.RowTable)) {
+        this.rows.push.apply(this.rows, table.rows);
+      } else {
+        throw Error("merge not implemented for " + this.constructor.name);
+      }
+      return this;
+    };
+
+    RowTable.merge = function(tables) {
+      var idx, t, t2, _i, _len;
+      if (tables.length === 0) {
+        return new gg.data.RowTable(this.schema);
+      } else {
+        t = tables[0].cloneShallow();
+        for (idx = _i = 0, _len = tables.length; _i < _len; idx = ++_i) {
+          t2 = tables[idx];
+          if (idx > 0) {
+            t.merge(t2);
+          }
+        }
+        return t;
+      }
+    };
+
+    RowTable.prototype.split = function(gbfunc) {
+      var attr, groups, keys, ret, schema;
+      if (_.isString(gbfunc)) {
+        attr = gbfunc;
+        gbfunc = (function(key) {
+          return function(row) {
+            return row.get(key);
+          };
+        })(attr);
+      }
+      keys = {};
+      groups = {};
+      _.each(this.rows, function(row) {
+        var jsonKey, key;
+        key = gbfunc(row);
+        jsonKey = JSON.stringify(key);
+        if (!(jsonKey in groups)) {
+          groups[jsonKey] = [];
+        }
+        groups[jsonKey].push(row);
+        return keys[jsonKey] = key;
+      });
+      ret = [];
+      schema = this.schema.clone();
+      _.each(groups, function(rows, jsonKey) {
+        var partition;
+        partition = new gg.data.RowTable(schema, rows);
+        return ret.push({
+          key: keys[jsonKey],
+          table: partition
+        });
+      });
+      return ret;
+    };
+
+    RowTable.prototype.partition = function(cols) {
+      var groups, keys, ret, schema,
+        _this = this;
+      cols = _.flatten([cols]);
+      cols = _.filter(cols, function(col) {
+        return _this.schema.contains(col);
+      });
+      keys = {};
+      groups = {};
+      _.each(this.rows, function(row) {
+        var jsonKey, key;
+        key = _.map(cols, function(col) {
+          return row.get(col);
+        });
+        jsonKey = JSON.stringify(key);
+        if (!(jsonKey in groups)) {
+          groups[jsonKey] = [];
+        }
+        groups[jsonKey].push(row);
+        return keys[jsonKey] = key;
+      });
+      ret = [];
+      schema = this.schema.clone();
+      this.log("removing " + cols);
+      _.each(cols, function(col) {
+        return schema.rmColumn(col);
+      });
+      _.each(groups, function(rows, jsonKey) {
+        var partition;
+        _.each(rows, function(row) {
+          return row.rmColumns(cols);
+        });
+        partition = new gg.data.RowTable(schema, rows);
+        gg.wf.Stdout(partition, null, 5, this.log);
+        return ret.push({
+          key: keys[jsonKey],
+          table: partition
+        });
+      });
+      return ret;
+    };
+
+    RowTable.prototype.flatten = function(cols, recursive) {
+      var table;
+      if (cols == null) {
+        cols = null;
+      }
+      if (recursive == null) {
+        recursive = false;
+      }
+      table = new gg.data.RowTable(this.schema.flatten(cols, recursive));
+      this.each(function(row) {
+        return table.merge(row.flatten(cols, recursive));
+      });
+      return table;
+    };
+
+    RowTable.prototype.transform = function(colname, funcOrUpdate, update) {
+      var mapping, newrows,
+        _this = this;
+      if (funcOrUpdate == null) {
+        funcOrUpdate = true;
+      }
+      if (update == null) {
+        update = true;
+      }
+      if (_.isObject(colname)) {
+        mapping = colname;
+        update = funcOrUpdate;
+      } else {
+        mapping = {};
+        mapping[colname] = funcOrUpdate;
+      }
+      if (update) {
+        this.each(function(row) {
+          var newrow;
+          newrow = _this.transformRow(row, mapping);
+          return row.merge(newrow);
+        });
+        this.reloadSchema();
+        return this;
+      } else {
+        newrows = this.each(function(row) {
+          return _this.transformRow(row, mapping);
+        });
+        return gg.data.RowTable.fromArray(newrows);
+      }
+    };
+
+    RowTable.prototype.transformRow = function(row, mapping) {
+      var ret,
+        _this = this;
+      ret = {};
+      _.each(mapping, function(f, newattr) {
+        var attr1, attr2, newvalue, _ref;
+        newvalue = (function() {
+          try {
+            return f(row);
+          } catch (error) {
+            this.log.error(row.raw());
+            this.log.error(f.toString());
+            this.log.error(error);
+            throw error;
+          }
+        }).call(_this);
+        if (_.isArray(newvalue)) {
+          if (gg.data.Table.reNestedAttr.test(newattr)) {
+            _ref = newattr.split("."), attr1 = _ref[0], attr2 = _ref[1];
+            if (!(attr1 in ret)) {
+              ret[attr1] = {};
+            }
+            return _.each(newvalue, function(el, idx) {
+              if (idx >= ret[attr1].length) {
+                ret[attr1].push({});
+              }
+              return ret[attr1][attr2] = el;
+            });
+          } else {
+            throw Error("mapping arrays need to be nested");
+          }
+        } else {
+          return ret[newattr] = newvalue;
+        }
+      });
+      return ret;
+    };
+
+    RowTable.prototype.filter = function(f) {
+      var newrows;
+      newrows = [];
+      this.each(function(row, idx) {
+        if (f(row, idx)) {
+          return newrows.push(row);
+        }
+      });
+      return new gg.data.RowTable(this.schema, newrows);
+    };
+
+    RowTable.prototype.map = function(fOrMap, colName) {
+      var f, schema,
+        _this = this;
+      if (colName == null) {
+        colName = null;
+      }
+      if (_.isFunction(fOrMap)) {
+        if (colName == null) {
+          throw Error("RowTable.map without colname!");
+        }
+        f = fOrMap;
+        fOrMap = {};
+        fOrMap[colName] = f;
+      }
+      schema = this.schema;
+      this.each(function(row, idx) {
+        return _.each(fOrMap, function(f, col) {
+          var arr, newv;
+          if (schema.inArray(col)) {
+            arr = _.map(row.get(col), f);
+            return row.set(col, arr);
+          } else {
+            newv = f(row.get(col));
+            return row.set(col, newv);
+          }
+        });
+      });
+      if (!_.all(fOrMap, function(f, col) {
+        return _this.contains(col);
+      })) {
+        this.reloadSchema();
+      }
+      return this;
+    };
+
+    RowTable.prototype.addConstColumn = function(name, val, type) {
+      if (type == null) {
+        type = null;
+      }
+      if (type == null) {
+        type = gg.data.Schema.type(val);
+      }
+      return this.addColumn(name, _.repeat(this.nrows(), val), type);
+    };
+
+    RowTable.prototype.addColumn = function(name, vals, type) {
+      var _this = this;
+      if (type == null) {
+        type = null;
+      }
+      if (vals.length !== this.nrows()) {
+        throw Error("column has " + vals.length + " values,        table has " + this.rows.length + " rows");
+      }
+      if (type == null) {
+        type = vals.length === 0 ? {
+          type: gg.data.Schema.unknown,
+          schema: null
+        } : gg.data.Schema.type(vals[0]);
+      }
+      if (this.schema.contains(name)) {
+        if (type.type !== this.schema.type(name)) {
+          throw Error("column " + name + " already exists in table and           " + type + " != " + (this.schema.type(name)));
+        } else {
+          this.log.warn("column " + name + " already exists in table");
+        }
+      }
+      this.schema.addColumn(name, type.type, type.schema);
+      this.rows.forEach(function(row, idx) {
+        row.addColumn(name, vals[idx]);
+        return row.schema = _this.schema;
+      });
+      return this;
+    };
+
+    RowTable.prototype.addRow = function(row) {
+      this.rows.push(gg.data.RowTable.toRow(row, this.schema));
+      return this;
+    };
+
+    RowTable.prototype.get = function(row, col) {
+      if (col == null) {
+        col = null;
+      }
+      if (row >= 0 && row < this.rows.length) {
+        if (col != null) {
+          return this.rows[row].get(col);
+        } else {
+          return this.rows[row];
+        }
+      } else {
+        return null;
+      }
+    };
+
+    RowTable.prototype.getCol = function(col) {
+      return this.getColumn(col);
+    };
+
+    RowTable.prototype.getColumn = function(col) {
+      var _this = this;
+      if (this.nrows() > 0 && this.schema.contains(col)) {
+        if (this.schema.inArray(col)) {
+          return _.flatten(_.times(this.nrows(), function(idx) {
+            return _this.get(idx, col);
+          }));
+        } else {
+          return _.times(this.nrows(), function(idx) {
+            return _this.get(idx, col);
+          });
+        }
+      } else if (this.nrows() === 0 && this.schema.contains(col)) {
+        return [];
+      } else {
+        if (this.schema.contains(col && this.schema.isArray(col))) {
+          return [];
+        } else {
+          return null;
+        }
+      }
+    };
+
+    RowTable.prototype.asArray = function() {
+      return _.map(this.rows, function(row) {
+        return row;
+      });
+    };
+
+    RowTable.prototype.raw = function() {
+      return _.map(this.rows, function(row) {
+        return row.raw();
+      });
+    };
+
+    RowTable.prototype.rows = RowTable.rows;
+
+    RowTable.prototype.toJSON = function() {
+      return {
+        schema: this.schema.toJSON(),
+        data: this.raw()
+      };
+    };
+
+    RowTable.fromJSON = function(json) {
+      var dataJson, rawrows, schema, schemaJson;
+      schemaJson = json.schema;
+      dataJson = json.data;
+      schema = gg.data.Schema.fromSpec(schemaJson);
+      rawrows = dataJson;
+      return new gg.data.RowTable(schema, rawrows);
+    };
+
+    return RowTable;
+
+  })(gg.data.Table);
+
+  gg.geom.reparam.Line = (function(_super) {
+
+    __extends(Line, _super);
+
+    function Line() {
+      return Line.__super__.constructor.apply(this, arguments);
+    }
+
+    Line.ggpackage = "gg.geom.reparam.Line";
+
+    Line.prototype.defaults = function() {
+      return {
+        group: '1'
+      };
+    };
+
+    Line.prototype.inputSchema = function(data) {
+      return ['x', 'y'];
+    };
+
+    Line.prototype.outputSchema = function(data) {
+      var env, numeric, table, xtype, ytype;
+      table = data.table;
+      env = data.env;
+      numeric = gg.data.Schema.numeric;
+      xtype = table.schema.type('x');
+      ytype = table.schema.type('y');
+      return gg.data.Schema.fromSpec({
+        group: table.schema.typeObj('group'),
+        pts: {
+          type: gg.data.Schema.array,
+          schema: {
+            x: xtype,
+            y: ytype,
+            y0: ytype,
+            y1: ytype
+          }
+        }
+      });
+    };
+
+    Line.prototype.schemaMapping = function(data) {
+      return {
+        y0: 'y',
+        y1: 'y'
+      };
+    };
+
+    Line.prototype.compute = function(data, params) {
+      var env, groups, rows, scales, schema, table, y0, _ref,
+        _this = this;
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+      scales = this.scales(data, params);
+      y0 = scales.scale('y', gg.data.Schema.numeric).minRange();
+      this.log("compute: y0 set to " + y0);
+      table.each(function(row) {
+        if (!row.hasAttr('y1')) {
+          row.set('y1', row.get('y'));
+        }
+        if (!row.hasAttr('y0')) {
+          return row.set('y0', y0);
+        }
+      });
+      groups = table.split('group');
+      rows = _.map(groups, function(group) {
+        var groupKey, groupTable, rowData;
+        groupTable = group.table;
+        groupKey = group.key;
+        rowData = {
+          pts: groupTable.raw(),
+          group: groupKey
+        };
+        _this.log.warn("group " + (JSON.stringify(groupKey)) + " has " + (groupTable.nrows()) + " pts");
+        return rowData;
+      });
+      schema = params.get('outputSchema')(data, params);
+      table = new gg.data.RowTable(schema, rows);
+      return new gg.wf.Data(table, env);
+    };
+
+    return Line;
+
+  })(gg.core.XForm);
+
+  gg.geom.reparam.Boxplot = (function(_super) {
+
+    __extends(Boxplot, _super);
+
+    function Boxplot() {
+      return Boxplot.__super__.constructor.apply(this, arguments);
+    }
+
+    Boxplot.ggpackage = 'gg.geom.reparam.Boxplot';
+
+    Boxplot.prototype.defaults = function() {
+      return {
+        x: 1,
+        group: "1"
+      };
+    };
+
+    Boxplot.prototype.inputSchema = function() {
+      return ['x', 'q1', 'median', 'q3', 'lower', 'upper', 'outliers', 'min', 'max'];
+    };
+
+    Boxplot.prototype.outputSchema = function(data) {
+      var env, table;
+      table = data.table;
+      env = data.env;
+      return gg.data.Schema.fromSpec({
+        group: table.schema.typeObj('group'),
+        x: table.schema.type('x'),
+        x0: table.schema.type('x'),
+        x1: table.schema.type('x'),
+        width: gg.data.Schema.numeric,
+        y0: gg.data.Schema.numeric,
+        y1: gg.data.Schema.numeric,
+        q1: gg.data.Schema.numeric,
+        q3: gg.data.Schema.numeric,
+        median: gg.data.Schema.numeric,
+        lower: gg.data.Schema.numeric,
+        upper: gg.data.Schema.numeric,
+        outliers: {
+          type: gg.data.Schema.array,
+          schema: {
+            outlier: gg.data.Schema.numeric
+          }
+        },
+        min: gg.data.Schema.numeric,
+        max: gg.data.Schema.numeric
+      });
+    };
+
+    Boxplot.prototype.compute = function(data, params) {
+      var diffs, env, mapping, mindiff, scales, table, width, xs, yscale, _ref;
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+      scales = this.scales(data);
+      yscale = scales.scale('y', gg.data.Schema.numeric);
+      xs = _.uniq(table.getColumn("x")).sort(d3.ascending);
+      this.log("xs: " + xs);
+      diffs = _.map(_.range(xs.length - 1), function(idx) {
+        return xs[idx + 1] - xs[idx];
+      });
+      mindiff = _.mmin(diffs || 1);
+      width = mindiff * 0.8;
+      width = Math.min(width, 40);
+      mapping = {
+        y0: 'min',
+        y1: 'max',
+        x0: function(row) {
+          return row.get('x') - width / 2.0;
+        },
+        x1: function(row) {
+          return row.get('x') + width / 2.0;
+        }
+      };
+      mapping = _.mappingToFunctions(table, mapping);
+      table.transform(mapping, true);
+      table.setSchema(params.get('outputSchema')(data, params));
+      return data;
+    };
+
+    return Boxplot;
 
   })(gg.core.XForm);
 
@@ -13886,111 +12585,230 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Bound.prototype.toString = function() {
-      return "d: " + this.x0 + ", " + this.y0 + ".  " + (this.w()) + "x" + (this.h());
+      return JSON.stringify([this.x0, this.y0, this.x1, this.y1]);
     };
 
     return Bound;
 
   })();
 
-  gg.geom.reparam.Bin2D = (function(_super) {
+  gg.geom.svg.Boxplot = (function(_super) {
 
-    __extends(Bin2D, _super);
+    __extends(Boxplot, _super);
 
-    function Bin2D() {
-      return Bin2D.__super__.constructor.apply(this, arguments);
+    function Boxplot() {
+      return Boxplot.__super__.constructor.apply(this, arguments);
     }
 
-    Bin2D.ggpackage = "gg.geom.reparam.Bin2D";
+    Boxplot.ggpackage = "gg.geom.svg.Boxplot";
 
-    Bin2D.prototype.inputSchema = function() {
-      return ['x', 'y', 'z'];
+    Boxplot.aliases = ["schema", "boxplot"];
+
+    Boxplot.prototype.defaults = function() {
+      return {
+        "stroke-width": 1,
+        stroke: "steelblue",
+        fill: d3.rgb("steelblue").brighter(2),
+        "fill-opacity": 0.5
+      };
     };
 
-    Bin2D.prototype.compute = function(pairtable, params) {
-      var getHeight, groups, mapping, md, minY, mindiff, padding, scales, table, width, yscale;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      yscale = scales.scale('y', gg.data.Schema.numeric);
-      padding = 1.0 - params.get("padding");
-      groups = table.partition(['group']);
-      width = null;
-      mindiff = null;
-      _.each(groups, function(group) {
-        var diffs, subtable, subwidth, xs;
-        subtable = group.getTable();
-        xs = _.uniq(subtable.getColumn("x")).sort(function(a, b) {
-          return a - b;
-        });
-        diffs = _.map(_.range(xs.length - 1), function(idx) {
-          return xs[idx + 1] - xs[idx];
-        });
-        mindiff = _.mmin(diffs || 1);
-        mindiff *= padding;
-        subwidth = Math.max(1, mindiff);
-        if (width == null) {
-          width = subwidth;
+    Boxplot.prototype.inputSchema = function() {
+      return ['x', 'q1', 'median', 'q3', 'lower', 'upper', 'outliers', 'min', 'max'];
+    };
+
+    Boxplot.prototype.render = function(table, svg) {
+      var boxes, circles, enter, enterCircles, gs, height, iqr, lowert, lowerw, median, rows, uppert, upperw, width, x0, x1, y,
+        _this = this;
+      rows = table.asArray();
+      boxes = this.agroup(svg, "boxes geoms", rows).selectAll("circle").data(rows);
+      enter = boxes.enter().append("g").attr("class", "boxplot");
+      y = function(t) {
+        return Math.min(t.get('y0'), t.get('y1'));
+      };
+      height = function(t) {
+        return Math.abs(t.get('y1') - t.get('y0'));
+      };
+      width = function(t) {
+        return t.get('x1') - t.get('x0');
+      };
+      x0 = function(t) {
+        return t.get('x0');
+      };
+      x1 = function(t) {
+        return t.get('x1');
+      };
+      iqr = this.applyAttrs(enter.append('rect'), {
+        "class": "boxplot iqr",
+        x: x0,
+        y: function(t) {
+          return Math.min(t.get('q3'), t.get('q1'));
+        },
+        width: width,
+        height: function(t) {
+          return Math.abs(t.get('q1') - t.get('q3'));
         }
-        return width = Math.min(width, subwidth);
       });
-      minY = yscale.minDomain();
-      minY = 0;
-      getHeight = function(row) {
-        return yscale.scale(Math.abs(yscale.invert(row.get('y')) - minY));
-      };
-      this.log("mindiff: " + mindiff + "\twidth: " + width);
-      mapping = {
-        x: 'x',
-        y: 'y',
-        r: 'r',
-        x0: function(row) {
-          return row.get('x0') || row.get('x') - width / 2.0;
+      median = this.applyAttrs(enter.append('line'), {
+        "class": "boxplot median",
+        x1: x0,
+        x2: x1,
+        y1: function(t) {
+          return t.get('median');
         },
-        x1: function(row) {
-          return row.get('x1') || row.get('x') + width / 2.0;
-        },
-        y0: function(row) {
-          return row.get('y0') || Math.min(yscale.scale(minY), row.get('y'));
-        },
-        y1: function(row) {
-          return row.get('y1') || Math.max(yscale.scale(minY), row.get('y'));
+        y2: function(t) {
+          return t.get('median');
         }
-      };
-      mapping = _.mappingToFunctions(table, mapping);
-      table.transform(mapping, true);
-      return data;
+      });
+      upperw = this.applyAttrs(enter.append("line"), {
+        "class": "boxplot whisker",
+        x1: function(t) {
+          return t.get('x');
+        },
+        x2: function(t) {
+          return t.get('x');
+        },
+        y1: function(t) {
+          return t.get('q3');
+        },
+        y2: function(t) {
+          return t.get('upper');
+        }
+      });
+      uppert = this.applyAttrs(enter.append("line"), {
+        "class": "boxplot whisker",
+        x1: function(t) {
+          return t.get('x') - width(t) * 0.2;
+        },
+        x2: function(t) {
+          return t.get('x') + width(t) * 0.2;
+        },
+        y1: function(t) {
+          return t.get('upper');
+        },
+        y2: function(t) {
+          return t.get('upper');
+        }
+      });
+      lowerw = this.applyAttrs(enter.append("line"), {
+        "class": "boxplot whisker",
+        x1: function(t) {
+          return t.get('x');
+        },
+        x2: function(t) {
+          return t.get('x');
+        },
+        y1: function(t) {
+          return t.get('q1');
+        },
+        y2: function(t) {
+          return t.get('lower');
+        }
+      });
+      lowert = this.applyAttrs(enter.append("line"), {
+        "class": "boxplot whisker",
+        x1: function(t) {
+          return t.get('x') - width(t) * 0.2;
+        },
+        x2: function(t) {
+          return t.get('x') + width(t) * 0.2;
+        },
+        y1: function(t) {
+          return t.get('lower');
+        },
+        y2: function(t) {
+          return t.get('lower');
+        }
+      });
+      circles = enter.selectAll("circle").data(function(d) {
+        return _.map(d.get('outlier'), function(outlier) {
+          return {
+            y: outlier,
+            x: d.get('x')
+          };
+        });
+      });
+      enterCircles = circles.enter().append("circle");
+      this.applyAttrs(enterCircles, {
+        "class": "boxplot outlier",
+        cx: function(t) {
+          return t.x;
+        },
+        cy: function(t) {
+          return t.y;
+        }
+      });
+      gs = [enter];
+      return _.each(gs, function(g) {
+        var cssOut, cssOver;
+        cssOver = {
+          "fill-opacity": 1,
+          "stroke-opacity": 1,
+          fill: function(t) {
+            return d3.rgb(t.get('fill')).darker(1);
+          },
+          stroke: function(t) {
+            return d3.rgb(t.get("stroke")).darker(2);
+          },
+          "stroke-width": function(t) {
+            return t.get("stroke-width") + 0.5;
+          }
+        };
+        cssOut = {
+          "fill-opacity": function(t) {
+            return t.get('fill-opacity');
+          },
+          "stroke-opacity": function(t) {
+            return t.get("stroke-opacity");
+          },
+          fill: function(t) {
+            return t.get('fill');
+          },
+          stroke: function(t) {
+            return t.get("stroke");
+          },
+          "stroke-width": function(t) {
+            return t.get("stroke-width");
+          }
+        };
+        _this.applyAttrs(g, cssOut);
+        _this = _this;
+        return g.on("mouseover", function(d, idx) {
+          return _this.applyAttrs(d3.select(this), cssOver);
+        }).on("mouseout", function(d, idx) {
+          return _this.applyAttrs(d3.select(this), cssOut);
+        });
+      });
     };
 
-    return Bin2D;
+    return Boxplot;
 
-  })(gg.geom.reparam.Rect);
+  })(gg.geom.Render);
 
   gg.facet.pane.Container = (function() {
 
     Container.ggpackage = 'gg.facet.pane.Container';
 
-    function Container(c, xidx, yidx, x, y, bXFacet, bYFacet, bXAxis, bYAxis, opts) {
+    function Container(c, x, y, bXFacet, bYFacet, bXAxis, bYAxis, labelHeight, yAxisW, padding) {
       this.c = c;
-      this.xidx = xidx;
-      this.yidx = yidx;
       this.x = x;
       this.y = y;
       this.bXFacet = bXFacet;
       this.bYFacet = bYFacet;
       this.bXAxis = bXAxis;
       this.bYAxis = bYAxis;
-      this.opts = opts != null ? opts : {};
-      this.labelHeight = this.opts.labelHeight || 15;
-      this.yAxisW = this.opts.yAxisW || 20;
-      this.xAxisW = this.opts.xAxisW || 20;
-      this.padding = this.opts.padding || 5;
+      this.labelHeight = labelHeight;
+      this.yAxisW = yAxisW;
+      this.padding = padding != null ? padding : 5;
       this.lpad = this.rpad = this.upad = this.bpad = 0;
       if (!this.bYAxis) {
         this.lpad = this.padding;
       }
       if (!this.bYFacet) {
         this.rpad = this.padding;
+      }
+      if (!this.bXAxis) {
+        this.bpad = this.padding;
       }
       if (!this.bXFacet) {
         this.upad = this.padding;
@@ -14004,8 +12822,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     Container.prototype.toJSON = function() {
       return {
         c: _.toJSON(this.c),
-        xidx: _.toJSON(this.xidx),
-        yidx: _.toJSON(this.yidx),
         x: _.toJSON(this.x),
         y: _.toJSON(this.y),
         bXFacet: this.bXFacet,
@@ -14013,13 +12829,12 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         bXAxis: this.bXAxis,
         bYAxis: this.bYAxis,
         labelHeight: this.labelHeight,
-        yAxisW: this.yAxisW,
-        xAxisW: this.xAxisW
+        yAxisW: this.yAxisW
       };
     };
 
     Container.fromJSON = function(json) {
-      return new gg.facet.pane.Container(_.fromJSON(json.c), _.fromJSON(json.xidx), _.fromJSON(json.yidx), _.fromJSON(json.x), _.fromJSON(json.y), json.bXFacet, json.bYFacet, json.bXAxis, json.bYAxis, json.labelHeight, json.yAxisW, json.xAxisW);
+      return new gg.facet.pane.Container(_.fromJSON(json.c), _.fromJSON(json.x), _.fromJSON(json.y), json.bXFacet, json.bYFacet, json.bXAxis, json.bYAxis, json.labelHeight, json.yAxisW);
     };
 
     Container.prototype.toString = function() {
@@ -14095,116 +12910,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })();
 
-  gg.facet.grid.PaneGrid = (function() {
-
-    function PaneGrid(xs, ys, opts) {
-      var labelHeight, nxs, nys, padding, showXAxis, showXFacet, showYAxis, showYFacet, xAxisW, yAxisW,
-        _this = this;
-      this.xs = xs;
-      this.ys = ys;
-      showXFacet = opts.showXFacet;
-      showYFacet = opts.showYFacet;
-      showXAxis = opts.showXAxis;
-      showYAxis = opts.showYAxis;
-      labelHeight = opts.labelHeight;
-      yAxisW = opts.yAxisW;
-      xAxisW = opts.xAxisW;
-      padding = opts.padding;
-      nxs = this.xs.length;
-      nys = this.ys.length;
-      opts = {
-        labelHeight: labelHeight,
-        yAxisW: yAxisW,
-        xAxisW: xAxisW,
-        padding: padding
-      };
-      this.grid = _.map(this.xs, function(x, xidx) {
-        return _.map(_this.ys, function(y, yidx) {
-          var bXAxis, bXFacet, bYAxis, bYFacet;
-          bXFacet = showXFacet && yidx === 0;
-          bYFacet = showYFacet && xidx >= nxs - 1;
-          bXAxis = showXAxis && yidx >= nys - 1;
-          bYAxis = showYAxis && xidx === 0;
-          return new gg.facet.pane.Container(gg.core.Bound.empty(), xidx, yidx, x, y, bXFacet, bYFacet, bXAxis, bYAxis, opts);
-        });
-      });
-    }
-
-    PaneGrid.prototype.getByIdx = function(xidx, yidx) {
-      return this.grid[xidx][yidx];
-    };
-
-    PaneGrid.prototype.getByVal = function(x, y) {
-      var xidx, yidx;
-      xidx = _.indexOf(this.xs, x);
-      yidx = _.indexOf(this.ys, y);
-      return this.getByIdx(xidx, yidx);
-    };
-
-    PaneGrid.prototype.xPrefix = function(xidx, yidx) {
-      var _this = this;
-      return _.times(xidx, function(i) {
-        return _this.grid[i][yidx];
-      });
-    };
-
-    PaneGrid.prototype.yPrefix = function(xidx, yidx) {
-      var _this = this;
-      return _.times(yidx, function(i) {
-        return _this.grid[xidx][i];
-      });
-    };
-
-    PaneGrid.prototype.each = function(f) {
-      var ret,
-        _this = this;
-      ret = _.map(this.grid, function(o, xidx) {
-        return _.map(o, function(pane, yidx) {
-          return f(pane, xidx, yidx, _this.xs[xidx], _this.ys[yidx]);
-        });
-      });
-      return _.flatten(ret);
-    };
-
-    PaneGrid.prototype.layout = function(w, h) {
-      var nonPaneH, nonPaneHs, nonPaneW, nonPaneWs, paneH, paneW,
-        _this = this;
-      nonPaneWs = _.times(this.ys.length, function() {
-        return 0;
-      });
-      nonPaneHs = _.times(this.xs.length, function() {
-        return 0;
-      });
-      this.each(function(pane, xidx, yidx, x, y) {
-        var dx, dy;
-        dx = pane.labelHeight * pane.bYFacet + pane.yAxisW * pane.bYAxis;
-        dy = pane.labelHeight * (pane.bXFacet + pane.bXAxis);
-        nonPaneWs[yidx] += dx;
-        return nonPaneHs[xidx] += dy;
-      });
-      nonPaneW = _.mmax(nonPaneWs);
-      nonPaneH = _.mmax(nonPaneHs);
-      this.paneH = paneH = (h - nonPaneH) / this.ys.length;
-      this.paneW = paneW = (w - nonPaneW) / this.xs.length;
-      return this.each(function(pane, xidx, yidx, x, y) {
-        var dx, dy;
-        pane.c.x1 = paneW;
-        pane.c.y1 = paneH;
-        dx = _.sum(_.map(_this.xPrefix(xidx, yidx), function(pane) {
-          return pane.w();
-        }));
-        dy = _.sum(_.map(_this.yPrefix(xidx, yidx), function(pane) {
-          return pane.h();
-        }));
-        pane.c.d(dx, dy);
-        return pane.c.d(pane.yAxisC().w(), pane.xFacetC().h());
-      });
-    };
-
-    return PaneGrid;
-
-  })();
-
   gg.wf.Barrier = (function(_super) {
 
     __extends(Barrier, _super);
@@ -14217,86 +12922,32 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Barrier.type = "barrier";
 
-    Barrier.prototype.compute = function(tableset, params, cb) {
-      return cb(null, tableset);
+    Barrier.prototype.compute = function(datas, params) {
+      return datas;
     };
 
     Barrier.prototype.run = function() {
-      var compute, pairtables, tableset,
-        _this = this;
+      var datas, flat, idx, md, output, outputs, pstore, _i, _len, _ref;
       if (!this.ready()) {
         throw Error("Node not ready");
       }
-      compute = this.params.get('compute') || this.compute.bind(this);
-      pairtables = _.map(this.inputs, function(pt, idx) {
-        var md, t;
-        t = pt.getTable();
-        t = t.setColumn('_barrier', idx, gg.data.Schema.numeric);
-        md = pt.getMD();
-        md = md.setColumn('_barrier', idx, gg.data.Schema.numeric);
-        return new gg.data.PairTable(t, md);
+      _ref = gg.wf.Inputs.flatten(this.inputs), flat = _ref[0], md = _ref[1];
+      datas = this.compute(flat, this.params);
+      outputs = gg.wf.Inputs.unflatten(datas, md);
+      pstore = this.pstore();
+      gg.wf.Inputs.mapLeaves(this.inputs, function(data, path) {
+        return pstore.writeData(path, path);
       });
-      tableset = new gg.data.TableSet(pairtables);
-      return compute(tableset, this.params, function(err, tableset) {
-        var idx, p, ps, result, t, _i, _len, _results;
-        if (err != null) {
-          throw err;
-        }
-        ps = gg.data.Transform.partitionJoin(tableset.getTable(), tableset.getMD(), '_barrier');
-        _results = [];
-        for (_i = 0, _len = ps.length; _i < _len; _i++) {
-          p = ps[_i];
-          idx = p['key'];
-          result = p['table'];
-          t = result.getTable().rmColumn('_barrier');
-          result = new gg.data.PairTable(t, result.getMD());
-          _results.push(_this.output(idx, result));
-        }
-        return _results;
-      });
+      for (idx = _i = 0, _len = outputs.length; _i < _len; idx = ++_i) {
+        output = outputs[idx];
+        this.output(idx, output);
+      }
+      return outputs;
     };
 
     return Barrier;
 
   })(gg.wf.Node);
-
-  gg.wf.SyncBarrier = (function(_super) {
-
-    __extends(SyncBarrier, _super);
-
-    function SyncBarrier() {
-      return SyncBarrier.__super__.constructor.apply(this, arguments);
-    }
-
-    SyncBarrier.prototype.parseSpec = function() {
-      var f, makecompute, name;
-      SyncBarrier.__super__.parseSpec.apply(this, arguments);
-      f = this.params.get('compute');
-      if (f == null) {
-        f = this.compute.bind(this);
-      }
-      name = this.name;
-      makecompute = function(f) {
-        return function(pairtable, params, cb) {
-          var res;
-          try {
-            res = f(pairtable, params, function() {
-              throw Error("SyncBarrier should not call callback");
-            });
-            return cb(null, res);
-          } catch (err) {
-            console.log("err in SyncBarrier " + name);
-            console.log(err.toString());
-            return cb(err, null);
-          }
-        };
-      };
-      return this.params.put('compute', makecompute(f));
-    };
-
-    return SyncBarrier;
-
-  })(gg.wf.Barrier);
 
   gg.core.BForm = (function(_super) {
 
@@ -14311,35 +12962,21 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     BForm.log = gg.util.Log.logger(BForm.ggpackage, BForm.ggpackage.substr(BForm.ggpackage.lastIndexOf(".") + 1));
 
     BForm.prototype.parseSpec = function() {
-      var FormUtil, f, makecompute, mapSpec;
+      var compute,
+        _this = this;
       this.log("XForm spec: " + (JSON.stringify(this.spec)));
-      if (_.findGoodAttr(this.spec, ['aes', 'aesthetic', 'mapping', 'map'], null) != null) {
-        mapSpec = _.clone(this.spec);
-        if (mapSpec.name == null) {
-          mapSpec.name = "stat-map";
-        }
-        this.map = gg.xform.Mapper.fromSpec(mapSpec);
-      }
       this.params.putAll({
         inputSchema: this.extractAttr("inputSchema"),
         outputSchema: this.extractAttr("outputSchema"),
         defaults: this.extractAttr("defaults")
       });
       this.params.ensure("klassname", [], this.constructor.ggpackage);
-      f = this.spec.f;
-      if (f == null) {
-        f = this.compute.bind(this);
-      }
-      FormUtil = gg.core.FormUtil;
-      makecompute = function(log) {
-        return function(pairtable, params) {
-          pairtable = FormUtil.addDefaults(pairtable, params, log);
-          FormUtil.validateInput(pairtable, params);
-          return f(pairtable, params);
-        };
+      compute = this.spec.f || this.compute.bind(this);
+      return this.compute = function(datas, params) {
+        gg.core.FormUtil.multiAddDefaults(datas, params, _this.log);
+        gg.core.FormUtil.multiValidateInput(datas, params);
+        return compute(datas, params);
       };
-      this.params.put('compute', makecompute(this.log));
-      return BForm.__super__.parseSpec.apply(this, arguments);
     };
 
     BForm.prototype.extractAttr = function(attr, spec) {
@@ -14360,15 +12997,15 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return val;
     };
 
-    BForm.prototype.defaults = function(tableset, params) {
+    BForm.prototype.defaults = function(data, params) {
       return {};
     };
 
-    BForm.prototype.inputSchema = function(tableset, params) {
+    BForm.prototype.inputSchema = function(data, params) {
       return [];
     };
 
-    BForm.prototype.outputSchema = function(tableset, params) {
+    BForm.prototype.outputSchema = function(data, params) {
       return data.table.schema;
     };
 
@@ -14404,7 +13041,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     return BForm;
 
-  })(gg.wf.SyncBarrier);
+  })(gg.wf.Barrier);
 
   gg.scale.train.Pixel = (function(_super) {
 
@@ -14416,55 +13053,32 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Pixel.ggpackage = "gg.scale.train.Pixel";
 
-    Pixel.prototype.compute = function(pairtable, params) {
-      return gg.scale.train.Pixel.train(pairtable, params, this.log);
-    };
-
-    Pixel.train = function(pairtable, params, log) {
-      var args, fMergeDomain, fOldScales, fRescale, oldScaleSets, partitions, tset;
-      fOldScales = function(pt, idx) {
-        var s;
-        s = pt.getMD().get(0, 'scales').clone();
-        log("" + idx + " origScales: " + (s.toString()));
-        return s;
-      };
-      partitions = pairtable.fullPartition();
-      oldScaleSets = _.map(partitions, fOldScales);
-      args = _.zip(partitions, oldScaleSets);
-      fMergeDomain = this.createMergeDomain(log);
-      partitions = _.map(args, fMergeDomain);
-      tset = new gg.data.TableSet(partitions);
-      tset = gg.scale.train.Master.train(tset, params);
-      partitions = tset.fullPartition();
-      args = _.zip(partitions, oldScaleSets);
-      fRescale = this.createRescale(log);
-      partitions = _.map(args, fRescale);
-      return new gg.data.TableSet(partitions);
-    };
-
-    Pixel.createMergeDomain = function(log) {
-      var Schema;
+    Pixel.prototype.compute = function(datas, params) {
+      var Schema, args, envs, fMergeDomain, fOldScaleSet, fRescale, newTables, oldScaleSets, tables,
+        _this = this;
       Schema = gg.data.Schema;
-      return function(_arg, idx) {
-        var f, md, newscaleset, oldscaleset, posMapping, pt, seen, t;
-        pt = _arg[0], oldscaleset = _arg[1];
-        t = pt.getTable();
-        md = pt.getMD();
-        posMapping = md.get(0, 'posMapping') || {};
+      fOldScaleSet = function(_arg, idx) {
+        var e, scaleset, t;
+        t = _arg[0], e = _arg[1];
+        scaleset = e.get('scales');
+        scaleset = scaleset.clone();
+        _this.log("" + idx + " origScaleSet: " + (scaleset.toString()));
+        return scaleset;
+      };
+      fMergeDomain = function(_arg, idx) {
+        var e, f, newscaleset, oldscaleset, posMapping, seen, t;
+        t = _arg[0], e = _arg[1], oldscaleset = _arg[2];
         newscaleset = oldscaleset.clone();
         seen = {};
+        posMapping = e.get('posMapping');
+        _this.log("" + idx + " posMapping: " + (JSON.stringify(posMapping)));
         f = function(table, oldscale, aes) {
           var col, domain, newscale, range;
           if (_.isSubclass(oldscale, gg.scale.Identity)) {
-            return table;
+            return;
           }
-          if (oldscale.frozen) {
-            return table;
-          }
-          log("" + idx + " retrive " + aes + ": " + oldscale.aes + "\t" + oldscale.type);
-          if (newscaleset.contains(oldscale.aes, t.schema.type(aes))) {
-            newscale = newscaleset.scale(oldscale.aes, t.schema.type(aes));
-          } else if (newscaleset.contains(oldscale.aes)) {
+          _this.log("" + idx + " retrive " + aes + ": " + oldscale.aes + "\t" + oldscale.type);
+          if (newscaleset.contains(oldscale.aes)) {
             newscale = newscaleset.scale(oldscale.aes, Schema.unknown);
           } else {
             newscale = oldscale.clone();
@@ -14472,20 +13086,20 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           }
           col = table.getColumn(aes).filter(_.isValid);
           if (!((col != null) && col.length > 0)) {
-            log("" + idx + " mergeDomain: aes " + aes + " " + ((col != null) && col.length > 0));
-            log("" + idx + " mergeDomain: " + (newscale.toString()));
-            return table;
+            _this.log("" + idx + " mergeDomain: aes " + aes + " " + ((col != null) && col.length > 0));
+            _this.log("" + idx + " mergeDomain: " + (newscale.toString()));
+            return;
           }
           if (_.isSubclass(oldscale, gg.scale.BaseCategorical)) {
-            log("" + idx + " mergeDomain: categorical.  skipping");
-            log("" + idx + " mergeDomain: " + (newscale.toString()));
-            return table;
+            _this.log("" + idx + " mergeDomain: categorical.  skipping");
+            _this.log("" + idx + " mergeDomain: " + (newscale.toString()));
+            return;
           }
           if (!(newscale.id in seen)) {
             newscale.resetDomain();
             seen[newscale.id] = true;
           }
-          log("" + idx + " oldScale: " + (oldscale.toString()));
+          _this.log("" + idx + " oldScale: " + (oldscale.toString()));
           range = oldscale.defaultDomain(col);
           domain = _.map(range, function(v) {
             if (v != null) {
@@ -14495,73 +13109,53 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
             }
           });
           newscale.mergeDomain(domain);
-          log("" + idx + " mergeDomain: " + aes + "\trange: " + range);
-          log("" + idx + " mergeDomain: " + aes + "\tdomain: " + domain);
-          log("" + idx + " mergeDomain: " + (newscale.toString()));
-          return table;
+          _this.log("" + idx + " mergeDomain: " + aes + "\trange: " + range);
+          _this.log("" + idx + " mergeDomain: " + aes + "\tdomain: " + domain);
+          return _this.log("" + idx + " mergeDomain: " + (newscale.toString()));
         };
-        t = oldscaleset.useScales(t, posMapping, f);
-        md = md.setColumn('scales', newscaleset);
-        return new gg.data.PairTable(t, md);
+        oldscaleset.useScales(t, posMapping, f);
+        return e.put('scales', newscaleset);
       };
-    };
-
-    Pixel.createRescale = function(log) {
-      var Schema;
-      Schema = gg.data.Schema;
-      return function(_arg, idx) {
-        var layer, mappingFuncs, maxy, md, miny, oldscaleset, posMapping, pt, range, rescale, scaleset, t, ys, yscale, _ref,
-          _this = this;
-        pt = _arg[0], oldscaleset = _arg[1];
-        t = pt.getTable();
-        md = pt.getMD();
-        scaleset = md.get(0, 'scales');
-        posMapping = md.get(0, 'posMapping') || {};
-        layer = md.get(0, 'layer');
-        mappingFuncs = [];
-        log("" + idx + " fRescale called layer: " + layer);
+      fRescale = function(_arg, idx) {
+        var e, mappingFuncs, oldScales, posMapping, rescale, scaleset, t;
+        t = _arg[0], e = _arg[1], oldScales = _arg[2];
+        _this.log("" + idx + " fRescale called layer: " + (e.get("layer")));
+        scaleset = e.get('scales');
+        posMapping = e.get('posMapping');
+        mappingFuncs = {};
         rescale = function(table, scale, aes) {
-          var g, oldScale, tabletype;
+          var g, oldScale;
           if (scale.type === Schema.ordinal) {
-            log("scale ordinal, skipping: " + aes);
-            return table;
+            return;
           }
-          if (scale.frozen) {
-            return table;
-          }
-          tabletype = table.schema.type(aes);
-          if (oldscaleset.contains(posMapping[aes] || aes, tabletype)) {
-            oldScale = oldscaleset.scale(aes, tabletype, posMapping);
-          } else {
-            oldScale = oldscaleset.scale(aes, Schema.unknown, posMapping);
-          }
+          oldScale = oldScales.scale(aes, Schema.unknown, posMapping);
           g = function(v) {
             return scale.scale(oldScale.invert(v));
           };
-          mappingFuncs.push([aes, g, gg.data.Schema.unknown]);
-          log("" + idx + " rescale: old: " + (oldScale.toString()));
-          log("" + idx + " rescale: new: " + (scale.toString()));
-          return table;
+          mappingFuncs[aes] = g;
+          _this.log("" + idx + " rescale: old: " + (oldScale.toString()));
+          return _this.log("" + idx + " rescale: new: " + (scale.toString()));
         };
         scaleset.useScales(t, posMapping, rescale);
-        log("" + idx + " " + (scaleset.toString()));
-        t = gg.data.Transform.mapCols(t, mappingFuncs);
-        if (false && t.has('y')) {
-          ys = t.getColumn('y');
-          yscale = scaleset.get('y', [t.schema.type('y'), Schema.unknown]);
-          range = yscale.range();
-          _ref = [_.min(ys), _.max(ys)], miny = _ref[0], maxy = _ref[1];
-          if (miny < range[0]) {
-            console.log(yscale.toString());
-            throw Error("shit, rescaled y(" + miny + ") is < range(" + range[0] + ") ");
-          }
-          if (maxy > range[1]) {
-            console.log(yscale.toString());
-            throw Error("shit, rescaled y(" + maxy + ") is > range(" + range[1] + ")");
-          }
-        }
-        return new gg.data.PairTable(t, md);
+        _this.log("" + idx + " " + (scaleset.toString()));
+        t.map(mappingFuncs);
+        return t;
       };
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
+      oldScaleSets = _.map(_.zip(tables, envs), fOldScaleSet);
+      args = _.zip(tables, envs, oldScaleSets);
+      _.each(args, fMergeDomain);
+      gg.scale.train.Master.train(datas, params);
+      newTables = _.map(args, fRescale);
+      _.times(newTables.length, function(idx) {
+        return datas[idx].table = newTables[idx];
+      });
+      return datas;
     };
 
     return Pixel;
@@ -14579,64 +13173,67 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     Master.ggpackage = "gg.scale.train.Master";
 
     Master.prototype.parseSpec = function() {
-      Master.__super__.parseSpec.apply(this, arguments);
       return this.params.ensure('scalesTrain', [], 'fixed');
     };
 
-    Master.prototype.compute = function(pairtable, params) {
-      return gg.scale.train.Master.train(pairtable, params);
+    Master.prototype.compute = function(datas, params) {
+      gg.scale.train.Master.train(datas, params);
+      return datas;
     };
 
-    Master.train = function(pairtable, params) {
-      var masterSet, md, scalesTrain, set, sets, table, _i, _len;
+    Master.train = function(datas, params) {
+      var envs, masterScaleSet, scaleSetList, scalesTrain, xs, ys;
       scalesTrain = params.get('scalesTrain') || 'fixed';
-      table = pairtable.getTable();
-      md = pairtable.getMD();
+      scaleSetList = gg.core.FormUtil.scalesList(datas);
+      masterScaleSet = gg.scale.Set.merge(scaleSetList);
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
       if (scalesTrain === 'fixed') {
-        sets = md.getColumn('scales');
-        sets = _.uniq(sets, false, function(set) {
-          return set.id;
+        return _.each(envs, function(env) {
+          var scaleSet;
+          scaleSet = env.get('scales');
+          return scaleSet.merge(masterScaleSet, false);
         });
-        masterSet = new gg.scale.MergedSet(sets);
-        for (_i = 0, _len = sets.length; _i < _len; _i++) {
-          set = sets[_i];
-          set.merge(masterSet);
-        }
       } else {
-        md = this.trainFreeScales(md);
+        xs = gg.core.FormUtil.pick(datas, 'x');
+        ys = gg.core.FormUtil.pick(datas, 'y');
+        return this.trainFreeScales(envs, xs, ys);
       }
-      return new gg.data.PairTable(table, md);
     };
 
-    Master.trainFreeScales = function(md, xs, ys) {
-      var ps, xFacet, xscalesList, yFacet, yscalesList;
-      xFacet = 'facet-x';
-      yFacet = 'facet-y';
-      xscalesList = _.o2map(md.partition(xFacet), function(p) {
-        var key, scales;
-        key = p.get(0, xFacet);
-        scales = new gg.scale.MergedSet(p.getColumn('scales'));
-        return [key, scales.exclude(gg.scale.Scale.ys)];
+    Master.trainFreeScales = function(envs, xs, ys) {
+      var xKey, xScaleSets, yKey, yScaleSets;
+      xKey = gg.facet.base.Facets.facetXKey;
+      yKey = gg.facet.base.Facets.facetYKey;
+      xScaleSets = _.map(xs, function(x) {
+        var xenvs;
+        xenvs = _.filter(envs, function(env) {
+          return env.get(xKey) === x;
+        });
+        return gg.scale.Set.merge(_.map(xenvs, function(e) {
+          return e.get('scales');
+        })).exclude(gg.scale.Scale.ys);
       });
-      yscalesList = _.o2map(md.partition(yFacet), function(p) {
-        var key, scales;
-        key = p.get(0, yFacet);
-        scales = new gg.scale.MergedSet(p.getColumn('scales'));
-        return [key, scales.exclude(gg.scale.Scale.xs)];
+      yScaleSets = _.map(ys, function(y) {
+        var yenvs;
+        yenvs = _.filter(envs, function(env) {
+          return env.get(yKey) === y;
+        });
+        return gg.scale.Set.merge(_.map(yenvs, function(e) {
+          return e.get('scales');
+        })).exclude(gg.scale.Scale.xs);
       });
-      ps = _.map(md.partition(['facet-x', 'facet-y']), function(p) {
-        var set, x, y, _i, _len, _ref;
-        x = p.get(0, xFacet);
-        y = p.get(0, yFacet);
-        _ref = md.getColumn('scales');
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          set = _ref[_i];
-          set.merge(xscalesList[x]);
-          set.merge(yscalesList[y]);
-        }
-        return p;
+      return _.each(envs, function(env) {
+        var scaleSet, x, xidx, y, yidx;
+        x = env.get(xKey);
+        y = env.get(yKey);
+        xidx = _.indexOf(xs, x);
+        yidx = _.indexOf(ys, y);
+        scaleSet = env.get('scales');
+        scaleSet.merge(xScaleSets[xidx], false);
+        return scaleSet.merge(yScaleSets[yidx], false);
       });
-      return new gg.data.MultiTable(null, ps);
     };
 
     Master.prototype.expandDomains = function(scalesSet) {
@@ -14673,44 +13270,26 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return Data.__super__.parseSpec.apply(this, arguments);
     };
 
-    Data.prototype.compute = function(pairtable, params) {
-      return gg.scale.train.Data.train(pairtable, params, this.log);
-    };
-
-    Data.train = function(pairtable, params, log) {
-      var md, p, partitions, pms, sets, table, uniqs, _i, _len;
-      if (log == null) {
-        log = console.log;
-      }
-      pairtable = pairtable.ensure(pairtable.sharedCols());
-      pairtable = gg.core.FormUtil.ensureScales(pairtable, params, log);
-      partitions = pairtable.fullPartition();
-      for (_i = 0, _len = partitions.length; _i < _len; _i++) {
-        p = partitions[_i];
-        table = p.getTable();
-        md = p.getMD();
-        if (md.has('posMapping')) {
-          pms = md.getColumn('posMapping');
-        } else {
-          pms = _.times(md.nrows(), function() {
-            return null;
-          });
-        }
-        sets = md.getColumn('scales');
-        uniqs = _.uniq(_.zip(pms, sets), false, function(_arg) {
-          var pm, set;
-          pm = _arg[0], set = _arg[1];
-          return set.id;
-        });
-        _.each(uniqs, function(_arg) {
-          var pm, set;
-          pm = _arg[0], set = _arg[1];
-          return set.train(table, pm);
-        });
-      }
-      pairtable = new gg.data.TableSet(partitions);
-      pairtable = gg.scale.train.Master.train(pairtable, params);
-      return pairtable;
+    Data.prototype.compute = function(datas, params) {
+      var fTrain,
+        _this = this;
+      fTrain = function(data) {
+        var config, e, info, posMapping, scaleset, t, _ref;
+        _ref = [data.table, data.env], t = _ref[0], e = _ref[1];
+        info = _this.paneInfo(data);
+        posMapping = e.get('posMapping');
+        config = e.get('scalesconfig');
+        scaleset = config.scales(info.layer);
+        _this.log("trainOnData: cols:    " + (t.schema.toSimpleString()));
+        _this.log("trainOnData: set.id:  " + scaleset.id);
+        _this.log("trainOnData: pos:     " + (JSON.stringify(posMapping)));
+        scaleset.train(t, null, posMapping);
+        e.put('scales', scaleset);
+        return _this.log(scaleset.toString());
+      };
+      _.each(datas, fTrain);
+      gg.scale.train.Master.train(datas, params);
+      return datas;
     };
 
     return Data;
@@ -14808,17 +13387,21 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })();
 
-  gg.pos.Position = (function() {
+  gg.pos.Position = (function(_super) {
 
-    function Position() {}
+    __extends(Position, _super);
 
     Position.ggpackage = "gg.pos.Position";
 
-    Position.log = gg.util.Log.logger(Position.ggpackage, "position");
+    function Position(spec) {
+      this.spec = spec != null ? spec : {};
+      Position.__super__.constructor.apply(this, arguments);
+      this.parseSpec();
+    }
 
     Position.klasses = function() {
       var klasses, ret;
-      klasses = [gg.pos.Identity, gg.pos.Shift, gg.pos.Jitter, gg.pos.Stack, gg.pos.Dodge, gg.pos.Text, gg.pos.Bin2D, gg.pos.DotPlot];
+      klasses = [gg.pos.Identity, gg.pos.Shift, gg.pos.Jitter, gg.pos.Stack, gg.pos.Dodge, gg.pos.Text];
       ret = {};
       _.each(klasses, function(klass) {
         if (_.isArray(klass.aliases)) {
@@ -14849,7 +13432,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     return Position;
 
-  })();
+  })(gg.core.XForm);
 
   gg.pos.Identity = (function(_super) {
 
@@ -14863,17 +13446,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Identity.aliases = ["identity"];
 
-    Identity.prototype.compute = function(pairtable, params) {
-      return pairtable;
-    };
-
-    Identity.compile = function() {
-      return [];
-    };
-
     return Identity;
 
-  })(gg.core.XForm);
+  })(gg.pos.Position);
 
   gg.layer.Layer = (function() {
 
@@ -14981,66 +13556,50 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     }
 
     Shorthand.prototype.parseSpec = function() {
-      this.setupGeom();
-      this.setupStats();
-      this.setupPos();
-      this.setupMap();
-      this.setupCoord();
-      return Shorthand.__super__.parseSpec.apply(this, arguments);
-    };
-
-    Shorthand.prototype.setupGeom = function() {
+      var mapSpec, spec;
+      spec = this.spec;
       this.geomSpec = this.extractSpec("geom");
       this.geomSpec.name = "" + this.geomSpec.name + "-" + this.layerIdx;
-      return this.geom = gg.geom.Geom.fromSpec(this, this.geomSpec);
-    };
-
-    Shorthand.prototype.setupStats = function() {
-      var globalSpec, globalStats;
-      globalSpec = this.extractSpec('stat', this.g.spec);
-      globalSpec = _.flatten([globalSpec]);
-      globalStats = _.map(globalSpec, function(subSpec) {
-        return gg.stat.Stat.fromSpec(subSpec);
-      });
       this.statSpec = this.extractSpec("stat");
-      this.statSpec = _.flatten([this.statSpec]);
-      this.stats = _.map(this.statSpec, function(subSpec) {
-        return gg.stat.Stat.fromSpec(subSpec);
-      });
-      this.stats.unshift.apply(this.stats, globalStats);
-      return this.stats;
-    };
-
-    Shorthand.prototype.setupPos = function() {
-      var globalPos, globalSpec;
-      globalSpec = this.extractSpec("pos", this.g.spec);
-      globalSpec = _.flatten([globalSpec]);
-      globalPos = _.map(globalSpec, function(subSpec) {
-        return gg.pos.Position.fromSpec(subSpec);
-      });
       this.posSpec = this.extractSpec("pos");
-      this.posSpec = _.flatten([this.posSpec]);
-      this.pos = _.map(this.posSpec, function(subSpec) {
-        return gg.pos.Position.fromSpec(subSpec);
-      });
-      this.pos.unshift.apply(this.pos, globalPos);
-      return this.pos;
-    };
-
-    Shorthand.prototype.setupMap = function() {
-      var mapSpec;
-      mapSpec = _.findGoodAttr(this.spec, ['aes', 'aesthetic', 'mapping'], {});
+      mapSpec = _.findGoodAttr(spec, ['aes', 'aesthetic', 'mapping'], {});
+      mapSpec = _.extend(_.clone(this.g.aesspec), mapSpec);
       this.mapSpec = {
         aes: mapSpec,
         name: "map-shorthand-" + this.layerIdx
       };
-      return this.map = gg.xform.Mapper.fromSpec(this.mapSpec);
-    };
-
-    Shorthand.prototype.setupCoord = function() {
       this.coordSpec = this.extractSpec("coord");
       this.coordSpec.name = "coord-" + this.layerIdx;
-      return this.coord = gg.coord.Coordinate.fromSpec(this.coordSpec);
+      if ("group" in this.mapSpec.aes) {
+        this.groupSpec = "group";
+      }
+      console.log(["geomSpec", this.geomSpec]);
+      console.log(["statSpec", this.statSpec]);
+      console.log(["posSpec", this.posSpec]);
+      console.log(["coordSpec", this.coordSpec]);
+      console.log(["mapSpec", this.mapSpec]);
+      console.log(["groupSpec", this.groupSpec]);
+      this.geom = gg.geom.Geom.fromSpec(this, this.geomSpec);
+      this.stat = gg.stat.Stat.fromSpec(this.statSpec);
+      this.pos = gg.pos.Position.fromSpec(this.posSpec);
+      this.map = gg.xform.Mapper.fromSpec(this.mapSpec);
+      this.coord = gg.coord.Coordinate.fromSpec(this.coordSpec);
+      if (this.groupSpec != null) {
+        this.groupby = new gg.wf.PartitionCols({
+          name: "group-" + this.layerIdx,
+          params: {
+            key: "group",
+            cols: ['group']
+          }
+        });
+        this.groupbymerge = new gg.wf.Merge({
+          name: "groupbylabel-" + this.layerIdx,
+          params: {
+            key: "group"
+          }
+        });
+      }
+      return Shorthand.__super__.parseSpec.apply(this, arguments);
     };
 
     Shorthand.prototype.extractSpec = function(xform, spec) {
@@ -15081,169 +13640,116 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         }
       }
       if (subSpec.name == null) {
-        subSpec.name = "" + xform + "-" + subSpec.type + "-" + this.layerIdx;
+        subSpec.name = "" + xform + "-shorthand-" + this.layerIdx;
       }
       return subSpec;
     };
 
-    Shorthand.prototype.makeStdOut = function(name, params) {
-      var arg;
-      arg = _.clone(params);
-      params = {
-        n: 5,
-        cols: ['layer', 'group', 'fill', 'x', 'y']
-      };
-      _.extend(params, arg);
-      return new gg.wf.Stdout({
-        name: "" + name + "-" + this.layerIdx,
-        params: params
-      });
-    };
-
-    Shorthand.prototype.makeScalesOut = function(name) {
-      return new gg.wf.Scales({
-        name: "" + name + "-" + this.layerIdx
-      });
-    };
-
     Shorthand.prototype.compile = function() {
-      var addenv, nodes;
+      var debugaess, makeScalesOut, makeStdOut, nodes,
+        _this = this;
       this.log("compile()");
+      debugaess = ['x', 'y', 'q1', 'q3', 'median'];
+      debugaess = ['x', 'group', 'stroke'];
+      debugaess = null;
+      makeStdOut = function(name, params) {
+        var arg;
+        arg = _.clone(params);
+        params = {
+          n: 5,
+          aess: null
+        };
+        _.extend(params, arg);
+        return new gg.wf.Stdout({
+          name: "" + name + "-" + _this.layerIdx,
+          params: params
+        });
+      };
+      makeScalesOut = function(name, scales) {
+        if (scales == null) {
+          scales = _this.g.scales;
+        }
+        return new gg.wf.Scales({
+          name: "" + name + "-" + _this.layerIdx
+        });
+      };
       nodes = [];
-      addenv = gg.wf.SyncBlock.create((function(pt, params) {
-        var layerIdx, md, posMapping, t, _ref;
-        _ref = [pt.getTable(), pt.getMD()], t = _ref[0], md = _ref[1];
-        layerIdx = params.get('layer');
-        posMapping = params.get('posMapping');
-        t = t.setColumn('layer', layerIdx);
-        md = md.setColumn('layer', layerIdx);
-        md = md.setColumn('posMapping', posMapping);
-        return new gg.data.PairTable(t, md);
-      }), {
-        layer: this.layerIdx,
-        posMapping: this.geom.posMapping()
-      }, 'layer-labeler');
-      nodes.push(addenv);
-      nodes.push(this.compilePrestats());
-      nodes.push(this.g.facets.labeler);
-      nodes.push(this.compileStats());
-      nodes.push(this.compileGeomMap());
-      nodes.push(new gg.xform.ScalesValidate({
-        name: 'scales-validate'
-      }));
-      nodes.push(this.compileInitialLayout());
-      nodes.push(this.compileGeomReparam());
-      nodes.push(this.compileGeomPos());
-      nodes.push(this.compileCoord());
-      nodes.push(this.compileRender());
-      nodes = this.compileNodes(nodes);
-      return nodes;
-    };
-
-    Shorthand.prototype.compilePrestats = function() {
-      var nodes;
-      nodes = [
-        this.makeStdOut("init-data"), this.map, this.makeStdOut("post-map-" + this.layerIdx), new gg.xform.ScalesSchema({
-          name: "scales-schema-" + this.layerIdx,
-          params: {
-            config: this.g.scales.scalesConfig
-          }
-        }), this.makeStdOut("post-scaleschema"), this.makeScalesOut("post-scaleschema-" + this.layerIdx)
-      ];
-      return nodes;
-    };
-
-    Shorthand.prototype.compileStats = function() {
-      var nodes;
-      nodes = [];
-      nodes.push(this.makeStdOut("pre-train"));
-      nodes.push(this.g.scales.prestats);
-      nodes.push(this.makeScalesOut("pre-stat-" + this.layerIdx));
-      nodes.push(this.makeStdOut("post-train"));
-      nodes.push(new gg.xform.ScalesFilter({
-        name: "scalesfilter-" + this.layerIdx,
+      nodes.push(new gg.xform.EnvPut({
+        name: "layer-envput-" + this.layerIdx,
         params: {
-          posMapping: this.geom.posMapping(),
+          pairs: {
+            layer: this.layerIdx,
+            posMapping: this.geom.posMapping()
+          }
+        }
+      }));
+      nodes.push(makeStdOut("init-data"));
+      nodes.push(this.map);
+      nodes.push(makeStdOut("post-map-" + this.layerIdx));
+      nodes.push(new gg.xform.ScalesSchema({
+        name: "scales-schema-" + this.layerIdx,
+        params: {
           config: this.g.scales.scalesConfig
         }
       }));
-      nodes.push(this.makeStdOut("post-scalefilter-" + this.layerIdx));
-      nodes.push(this.makeScalesOut("pre-stat-" + this.layerIdx));
-      nodes.push(this.stats);
-      nodes.push(this.makeStdOut("post-stat-" + this.layerIdx));
-      nodes.push(this.makeScalesOut("post-stat-" + this.layerIdx));
-      return nodes;
-    };
-
-    Shorthand.prototype.compileGeomMap = function() {
-      var nodes;
-      nodes = [];
+      nodes.push(makeStdOut("post-scaleschema"));
+      nodes.push(this.groupby);
+      nodes.push(makeStdOut("post-gb"));
+      nodes.push(this.g.scales.prestats);
+      nodes.push(makeStdOut("post-train"));
+      nodes.push(new gg.xform.ScalesFilter({
+        name: "scalesfilter-" + this.layerIdx,
+        params: {
+          posMapping: this.geom.posMapping()
+        }
+      }));
+      nodes.push(makeStdOut("post-scalefilter-" + this.layerIdx));
+      nodes.push(makeScalesOut("pre-stat-" + this.layerIdx));
+      nodes.push(this.stat);
+      nodes.push(makeStdOut("post-stat-" + this.layerIdx));
+      nodes.push(this.groupbymerge);
+      nodes.push(makeStdOut("post-groupby-" + this.layerIdx));
+      nodes.push(this.g.facets.labelerNodes());
+      nodes.push(makeStdOut("post-facetLabel-" + this.layerIdx));
       nodes.push(this.geom.map);
-      nodes.push(this.makeStdOut("pre-geomtrain-" + this.layerIdx));
-      nodes.push(this.makeScalesOut("pre-geomtrain-" + this.layerIdx));
+      nodes.push(makeStdOut("pre-geomtrain-" + this.layerIdx));
       nodes.push(this.g.scales.postgeommap);
-      nodes.push(this.makeStdOut("post-geommaptrain"));
-      nodes.push(this.makeScalesOut("post-geommaptrain"));
-      return nodes;
-    };
-
-    Shorthand.prototype.compileInitialLayout = function() {
-      var nodes;
-      nodes = [];
+      nodes.push(makeStdOut("post-geommaptrain"));
+      nodes.push(makeScalesOut("post-geommaptrain"));
+      nodes.push(new gg.xform.ScalesValidate({
+        name: 'scales-validate'
+      }));
       nodes.push(this.g.layoutNode);
       nodes.push(this.g.facets.layout1);
       nodes.push(this.g.facets.trainer);
-      nodes.push(this.makeScalesOut("pre-scaleapply"));
+      nodes.push(makeScalesOut("pre-scaleapply"));
       nodes.push(new gg.xform.ScalesApply({
         name: "scalesapply-" + this.layerIdx,
         params: {
           posMapping: this.geom.posMapping()
         }
       }));
-      nodes.push(this.makeStdOut("post-scaleapply"));
-      return nodes;
-    };
-
-    Shorthand.prototype.compileGeomReparam = function() {
-      var nodes;
-      nodes = [];
+      nodes.push(makeStdOut("post-scaleapply"));
       nodes.push(this.geom.reparam);
-      nodes.push(this.makeStdOut("post-reparam"));
-      return nodes;
-    };
-
-    Shorthand.prototype.compileGeomPos = function() {
-      var nodes;
-      nodes = [];
-      if ((this.pos != null) && this.pos.length > 0) {
+      nodes.push(makeStdOut("post-reparam"));
+      if (this.pos != null) {
         nodes.push(this.pos);
-        nodes.push(this.makeStdOut("post-position"));
+        nodes.push(makeStdOut("post-position"));
         nodes.push(this.g.scales.pixel);
-        nodes.push(this.makeStdOut("post-pixeltrain"));
+        nodes.push(makeStdOut("post-pixeltrain"));
         nodes.push(this.g.facets.layout2);
       }
-      return nodes;
-    };
-
-    Shorthand.prototype.compileCoord = function() {
-      var nodes;
-      nodes = [];
-      nodes.push(this.makeScalesOut("pre-coord"));
+      nodes.push(makeScalesOut("pre-coord"));
       nodes.push(this.coord);
-      nodes.push(this.makeStdOut("post-coord"));
-      return nodes;
-    };
-
-    Shorthand.prototype.compileRender = function() {
-      var nodes;
-      nodes = [];
+      nodes.push(makeStdOut("post-coord"));
       nodes.push(this.g.renderNode);
       nodes.push(this.g.facets.render);
       nodes.push(this.g.facets.renderPanes());
-      nodes.push(this.makeStdOut("pre-render", {
+      nodes.push(makeStdOut("pre-render", {
         location: "client"
       }));
       nodes.push(this.geom.render);
+      nodes = this.compileNodes(nodes);
       return nodes;
     };
 
@@ -15264,96 +13770,15 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   gg.wf.rule.Rule = (function() {
 
-    Rule.ggpackage = "gg.wf.rule.Rule";
-
     function Rule(spec) {
       if (spec == null) {
         spec = {};
       }
-      this.params = spec.params || {};
-      this.params = new gg.util.Params(this.params);
+      this.params = spec.params || new gg.util.Params;
       this.log = gg.util.Log.logger(this.constructor.ggpackage, "rule");
     }
 
     Rule.prototype.run = function(flow) {
-      return flow;
-    };
-
-    Rule.validateReplacement = function(orig, news) {
-      var origClass, typeToClass;
-      if (!(news.length > 0)) {
-        return true;
-      }
-      typeToClass = function(type) {
-        switch (type) {
-          case "barrier":
-            return "barrier";
-          case "multicast":
-            return "multicast";
-          default:
-            return "normal";
-        }
-      };
-      origClass = typeToClass(orig);
-      return _.all(news, function(n) {
-        return typeToClass(n) === origClass;
-      });
-    };
-
-    Rule.replace = function(flow, node, replacements) {
-      var bcs, bps, cs, cur, lastnonbarrier, pre, prev, ps, _i, _j, _len, _len1,
-        _this = this;
-      replacements = _.compact(_.flatten([replacements]));
-      if (!this.validateReplacement(node, replacements)) {
-        throw Error("Rule replacement types don't match.        Expected " + node.type + ", got " + (_.map(replacements(function(r) {
-          return r.type;
-        }))));
-      }
-      if (replacements.length === 1 && replacements[0] === node) {
-        return;
-      }
-      cs = flow.children(node);
-      bcs = flow.bridgedChildren(node);
-      ps = flow.parents(node);
-      bps = flow.bridgedParents(node);
-      flow.rm(node);
-      cur = prev = null;
-      lastnonbarrier = null;
-      for (_i = 0, _len = replacements.length; _i < _len; _i++) {
-        cur = replacements[_i];
-        if (prev != null) {
-          flow.connect(prev, cur);
-        } else {
-          _.each(ps, function(p) {
-            return flow.connect(p, cur);
-          });
-          _.each(bps, function(p) {
-            return flow.connectBridge(p, cur);
-          });
-        }
-        if (cur.type !== "barrier") {
-          lastnonbarrier = cur;
-        }
-        prev = cur;
-      }
-      if (lastnonbarrier != null) {
-        _.each(cs, function(c) {
-          return flow.connect(cur, c);
-        });
-        _.each(bcs, function(c) {
-          return flow.connectBridge(cur, c);
-        });
-      }
-      prev = null;
-      for (_j = 0, _len1 = replacements.length; _j < _len1; _j++) {
-        cur = replacements[_j];
-        if (cur.type !== "barrier") {
-          if (prev != null) {
-            flow.connectBridge(prev, cur);
-          }
-          pre = cur;
-        }
-      }
       return flow;
     };
 
@@ -15467,228 +13892,569 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(events.EventEmitter);
 
-  gg.wf.rule.EnvPut = (function(_super) {
+  gg.wf.Block = (function(_super) {
+
+    __extends(Block, _super);
+
+    function Block() {
+      return Block.__super__.constructor.apply(this, arguments);
+    }
+
+    Block.ggpackage = "gg.wf.Block";
+
+    Block.type = "block";
+
+    Block.prototype.compute = function(datas, params) {
+      return datas;
+    };
+
+    Block.prototype.run = function() {
+      var data, flat, id2path, idx, newdatas, params, paths, pstore, _i, _len, _ref;
+      if (!this.ready()) {
+        throw Error("node not ready");
+      }
+      params = this.params;
+      pstore = this.pstore();
+      _ref = gg.wf.Inputs.flatten(this.inputs[0]), flat = _ref[0], paths = _ref[1];
+      newdatas = this.compute(flat, params);
+      pstore = this.pstore();
+      id2path = _.o2map(flat, function(data, idx) {
+        return [data.id, paths[idx]];
+      });
+      for (idx = _i = 0, _len = newdatas.length; _i < _len; idx = ++_i) {
+        data = newdatas[idx];
+        if (data.id in id2path) {
+          pstore.writeData([idx], id2path[data.id]);
+        } else {
+          pstore.writeData([idx], null);
+        }
+      }
+      return this.output(0, newdatas);
+    };
+
+    return Block;
+
+  })(gg.wf.Node);
+
+  gg.wf.EnvPut = (function(_super) {
 
     __extends(EnvPut, _super);
 
-    EnvPut.ggpackage = "gg.wf.rule.EnvPut";
-
-    function EnvPut(spec) {
-      EnvPut.__super__.constructor.apply(this, arguments);
+    function EnvPut() {
+      return EnvPut.__super__.constructor.apply(this, arguments);
     }
 
-    EnvPut.prototype.run = function(flow) {
-      var child, children, envput, node, pairs, puts, source, sources, _i, _j, _len, _len1, _ref;
-      return flow;
-      pairs = {};
-      puts = [];
-      _ref = flow.nodes();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        node = _ref[_i];
-        if (node.type === "envput") {
-          _.extend(pairs, node.params.get("pairs"));
-          flow.rm(node);
-          this.log("removed " + node.name);
-        }
-      }
-      this.log(pairs);
-      envput = new gg.xform.EnvPut({
-        name: "envput",
-        params: {
-          pairs: pairs
-        }
+    EnvPut.ggpackage = "gg.xform.EnvPut";
+
+    EnvPut.type = "envput";
+
+    EnvPut.prototype.parseSpec = function() {
+      return this.params.ensure('pairs', [], {});
+    };
+
+    EnvPut.prototype.compute = function(data, params) {
+      var _this = this;
+      _.each(params.get('pairs'), function(val, key) {
+        _this.log("envput: " + key + " -> " + val);
+        return data.env.put(key, val);
       });
-      sources = flow.sources();
-      for (_j = 0, _len1 = sources.length; _j < _len1; _j++) {
-        source = sources[_j];
-        children = flow.children(source);
-        if (children.length > 1) {
-          throw Error();
-        }
-        if (children.length === 0) {
-          continue;
-        }
-        child = children[0];
-        flow.insert(envput, source, child);
-        this.log("inserted new envput between " + source.name + " and " + child.name);
-      }
-      return flow;
+      return data;
     };
 
     return EnvPut;
 
-  })(gg.wf.rule.Rule);
+  })(gg.core.XForm);
 
-  gg.wf.rule.MergeBarrier = (function(_super) {
+  gg.wf.EnvGet = (function(_super) {
 
-    __extends(MergeBarrier, _super);
+    __extends(EnvGet, _super);
 
-    function MergeBarrier() {
-      return MergeBarrier.__super__.constructor.apply(this, arguments);
+    function EnvGet() {
+      return EnvGet.__super__.constructor.apply(this, arguments);
     }
 
-    MergeBarrier.ggpackage = "gg.wf.rule.MergeBarrier";
+    EnvGet.ggpackage = "gg.xform.EnvGet";
 
-    MergeBarrier.prototype.run = function(flow) {
-      var barrier, barriers, c, child, childparents, children, first, firstps, last, lastcs, md, newnode, node, p, parchildren, parent, parents, path, seen, tomerge, totalWeight, _i, _j, _k, _l, _len, _len1, _len2, _len3;
-      console.log("mergebarrier");
-      console.log(flow.toDot());
-      barriers = flow.find(function(n) {
-        return n.isBarrier();
+    EnvGet.type = "envget";
+
+    EnvGet.prototype.parseSpec = function() {
+      this.params.ensureAll({
+        envkey: [['key', 'envkey']],
+        attr: ['attr', 'key', 'envkey'],
+        "default": [[], null]
       });
-      seen = {};
-      tomerge = [];
-      for (_i = 0, _len = barriers.length; _i < _len; _i++) {
-        barrier = barriers[_i];
-        if (barrier.id in seen) {
-          continue;
-        }
-        path = [barrier];
-        node = barrier;
-        while (true) {
-          seen[node.id] = true;
-          children = flow.children(node);
-          if (!(children.length === 1 && children[0].isBarrier())) {
-            break;
-          }
-          child = children[0];
-          childparents = flow.parents(child);
-          if (childparents.length !== 1) {
-            break;
-          }
-          path.push(child);
-          node = child;
-        }
-        node = barrier;
-        while (true) {
-          seen[node.id] = true;
-          parents = flow.parents(node);
-          if (!(parents.length === 1 && parents[0].isBarrier())) {
-            break;
-          }
-          parent = parents[0];
-          parchildren = flow.children(parent);
-          if (parchildren.length !== 1) {
-            break;
-          }
-          path.unshift(parent);
-          node = parent;
-        }
-        if (path.length > 1) {
-          tomerge.push(path);
-        }
+      if (this.params.get('envkey') == null) {
+        throw Error("" + this.name + ": Need label key and value/value function)");
       }
-      console.log(tomerge);
-      for (_j = 0, _len1 = tomerge.length; _j < _len1; _j++) {
-        path = tomerge[_j];
-        newnode = this.mergeNodes(path);
-        first = path[0];
-        last = _.last(path);
-        firstps = flow.parents(first);
-        lastcs = flow.children(last);
-        if (firstps.length > 0) {
-          totalWeight = _.sum(firstps, function(p) {
-            return flow.edgeWeight(p, first);
-          });
-          for (_k = 0, _len2 = firstps.length; _k < _len2; _k++) {
-            p = firstps[_k];
-            md = flow.disconnect(p, first, "normal");
-            flow.connect(p, newnode, "normal", md);
-          }
-        }
-        if (lastcs.length > 0) {
-          totalWeight = _.sum(lastcs, function(c) {
-            return flow.edgeWeight(last, c);
-          });
-          for (_l = 0, _len3 = lastcs.length; _l < _len3; _l++) {
-            c = lastcs[_l];
-            md = flow.disconnect(last, c, "normal");
-            flow.connect(newnode, c, "normal", md);
-          }
-        }
-        flow.graph.rm.apply(flow.graph, path);
-      }
-      console.log(flow.toDot());
-      return flow;
     };
 
-    MergeBarrier.prototype.mergeNodes = function(path) {
-      var computes, f, names;
-      names = _.map(path, function(n) {
-        return n.name;
-      });
-      computes = _.map(path, function(n) {
-        var f;
-        f = n.params.get("compute");
-        if (f == null) {
-          f = n.compute.bind(n);
+    EnvGet.prototype.compute = function(data, params) {
+      var attr, defaultVal, envkey, val;
+      envkey = params.get('envkey');
+      defaultVal = params.get('default');
+      attr = params.get('attr');
+      if ((envkey != null) && data.env.contains(envkey)) {
+        val = defaultVal;
+        if (data.env.contains(envkey)) {
+          val = data.env.get(envkey);
         }
-        return (function(n) {
-          return function(tableset, cb) {
-            return f(tableset, n.params, cb);
-          };
-        })(n);
+        data.table.addConstColumn(attr, val);
+      }
+      return data;
+    };
+
+    return EnvGet;
+
+  })(gg.core.XForm);
+
+  gg.wf.Merge = (function(_super) {
+
+    __extends(Merge, _super);
+
+    function Merge() {
+      return Merge.__super__.constructor.apply(this, arguments);
+    }
+
+    Merge.ggpackage = "gg.wf.Merge";
+
+    Merge.type = "merge";
+
+    Merge.prototype.parseSpec = function() {
+      return this.params.ensureAll({
+        envkey: ['key', 'envkey'],
+        attr: ['attr', 'key', 'envkey'],
+        "default": ['default']
       });
-      f = (function(computes) {
-        return function(tableset, params, finalcb) {
-          computes.unshift(function(cb) {
-            return cb(null, tableset);
+    };
+
+    Merge.prototype.compute = function(datas, params) {
+      var attr, data, defaultVal, env, envkey, table, tables, val, _i, _len, _ref;
+      envkey = params.get('envkey');
+      defaultVal = params.get('default');
+      attr = params.get('attr');
+      this.log("Merge node tables and envs");
+      for (_i = 0, _len = datas.length; _i < _len; _i++) {
+        data = datas[_i];
+        _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+        val = env.contains(envkey) ? env.get(envkey) : defaultVal;
+        this.log("Merge adds attributes: " + attr + " -> " + val);
+        if (table.contains(attr)) {
+          if (table.schema.isArray(attr)) {
+            throw Error("Merge doesn't support setting array types");
+          }
+          table.each(function(row) {
+            return row.set(attr, val);
           });
-          return async.waterfall(computes, function(err, result) {
-            return finalcb(null, result);
-          });
+        } else {
+          table.addConstColumn(attr, val);
+        }
+      }
+      if (datas.length <= 1) {
+        return datas;
+      }
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      table = gg.data.Table.merge(tables);
+      return new gg.wf.Data(table, _.first(datas).env);
+    };
+
+    Merge.prototype.run = function() {
+      var compute, f, idx, output, outputs, params, pstore, _i, _len,
+        _this = this;
+      if (!this.ready()) {
+        throw Error("" + this.name + " not ready: " + this.inputs.length + " of " + (this.children().length) + " inputs");
+      }
+      params = this.params;
+      compute = this.params.get('compute');
+      pstore = this.pstore();
+      f = function(datas, outpath) {
+        var data, inpath, lastIdx, _i, _len;
+        for (lastIdx = _i = 0, _len = datas.length; _i < _len; lastIdx = ++_i) {
+          data = datas[lastIdx];
+          inpath = _.clone(outpath);
+          inpath.push(lastIdx);
+          pstore.writeData(outpath, inpath);
+        }
+        return _this.compute(datas, params);
+      };
+      outputs = gg.wf.Inputs.mapLeafArrays(this.inputs, f);
+      for (idx = _i = 0, _len = outputs.length; _i < _len; idx = ++_i) {
+        output = outputs[idx];
+        this.output(idx, output);
+      }
+      return outputs;
+    };
+
+    return Merge;
+
+  })(gg.wf.Node);
+
+  gg.wf.Multicast = (function(_super) {
+
+    __extends(Multicast, _super);
+
+    function Multicast() {
+      return Multicast.__super__.constructor.apply(this, arguments);
+    }
+
+    Multicast.ggpackage = "gg.wf.Multicast";
+
+    Multicast.type = "multicast";
+
+    Multicast.prototype.run = function() {
+      var idx, inputs, output, outputs, pstore, _i, _len,
+        _this = this;
+      if (!this.ready()) {
+        throw Error("Node not ready");
+      }
+      inputs = this.inputs[0];
+      pstore = this.pstore();
+      outputs = _.times(this.nChildren, function(idx) {
+        var cb, f;
+        f = idx < _this.nChildren ? function(data) {
+          _this.log("cloning data " + data);
+          return data.clone();
+        } : function(data) {
+          return data;
         };
-      })(computes);
-      return new gg.wf.Barrier({
-        name: "merged-" + (names.join('_')),
-        params: {
-          compute: f
-        }
+        cb = function(data, inpath) {
+          var outpath;
+          outpath = _.clone(inpath);
+          outpath.unshift(idx);
+          inpath.unshift(0);
+          pstore.writeData(outpath, inpath);
+          return f(data);
+        };
+        return gg.wf.Inputs.mapLeaves(inputs, cb);
       });
+      for (idx = _i = 0, _len = outputs.length; _i < _len; idx = ++_i) {
+        output = outputs[idx];
+        this.output(idx, output);
+      }
+      return outputs;
     };
 
-    return MergeBarrier;
+    return Multicast;
 
-  })(gg.wf.rule.Rule);
+  })(gg.wf.Node);
 
-  gg.wf.rule.Node = (function(_super) {
+  gg.wf.Stdout = (function(_super) {
 
-    __extends(Node, _super);
+    __extends(Stdout, _super);
 
-    function Node(spec) {
-      if (spec == null) {
-        spec = {};
-      }
-      Node.__super__.constructor.apply(this, arguments);
+    Stdout.ggpackage = "gg.wf.Stdout";
+
+    Stdout.type = "stdout";
+
+    function Stdout(spec) {
+      this.spec = spec;
+      Stdout.__super__.constructor.apply(this, arguments);
+      this.log = gg.util.Log.logger(this.constructor.ggpackage, "StdOut: " + this.name + "-" + this.id);
     }
 
-    Node.prototype.compute = function(node) {
-      return node;
+    Stdout.prototype.parseSpec = function() {
+      return this.params.ensureAll({
+        n: [[], null],
+        aess: [[], null]
+      });
     };
 
-    Node.prototype.run = function(flow) {
+    Stdout.prototype.compute = function(data, params) {
+      var env;
+      env = data.env;
+      this.log("facetX: " + (env.get("facetX")) + "\tfacetY: " + (env.get("facetY")));
+      gg.wf.Stdout.print(data.table, params.get('aess'), params.get('n'), this.log);
+      return data;
+    };
+
+    Stdout.print = function(table, aess, n, log) {
+      var blockSize, idx, row, schema, _results;
+      if (log == null) {
+        log = null;
+      }
+      if (_.isArray(table)) {
+        _.each(table, function(t) {
+          return gg.wf.Stdout.print(t, aess, n, log);
+        });
+      }
+      if (log == null) {
+        log = gg.util.Log.logger(gg.wf.Stdout.ggpackage, "stdout");
+      }
+      n = n != null ? n : table.nrows();
+      blockSize = Math.max(Math.floor(table.nrows() / n), 1);
+      idx = 0;
+      schema = table.schema;
+      if (aess != null) {
+        aess = aess.filter(function(aes) {
+          return schema.contains(aes);
+        });
+      }
+      log("# rows: " + (table.nrows()));
+      log("Schema: " + (schema.toSimpleString()));
+      _results = [];
+      while (idx < table.nrows()) {
+        row = table.get(idx);
+        if (aess != null) {
+          row = row.project(aess);
+        }
+        log(row.toString());
+        _results.push(idx += blockSize);
+      }
+      return _results;
+    };
+
+    Stdout.printTables = function() {
+      var args;
+      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      return this.print.apply(this, args);
+    };
+
+    return Stdout;
+
+  })(gg.wf.Exec);
+
+  gg.wf.Scales = (function(_super) {
+
+    __extends(Scales, _super);
+
+    Scales.ggpackage = "gg.wf.Scales";
+
+    Scales.type = "scaleout";
+
+    function Scales(spec) {
+      this.spec = spec;
+      Scales.__super__.constructor.apply(this, arguments);
+      this.log = gg.util.Log.logger(this.constructor.ggpackage, "Scales: " + this.name + "-" + this.id);
+    }
+
+    Scales.prototype.compute = function(data, params) {
+      var layerIdx;
+      layerIdx = data.env.get('layer');
+      gg.wf.Scales.print(data.env.get('scales'), layerIdx, this.log);
+      return data;
+    };
+
+    Scales.print = function(scaleset, layerIdx, log) {
       var _this = this;
-      _.each(flow.nodes(), function(node) {
-        var replacements;
-        replacements = _this.compute(node);
-        replacements = _.flatten([replacements]);
-        replacements = _.compact(replacements);
-        return gg.wf.rule.Rule.replace(flow, node, replacements);
+      if (log == null) {
+        log = null;
+      }
+      if (log == null) {
+        log = gg.util.Log.logger("scaleout");
+      }
+      log("scaleset " + scaleset.id + ", " + scaleset.scales);
+      return _.each(scaleset.scalesList(), function(scale) {
+        var str;
+        str = scale.toString();
+        return log("layer " + layerIdx + ", " + str);
       });
+    };
+
+    return Scales;
+
+  })(gg.wf.Exec);
+
+  gg.wf.Optimizer = (function() {
+
+    function Optimizer(rules) {
+      this.rules = rules;
+      if (!_.isArray(this.rules)) {
+        this.rules = [this.rules];
+      }
+    }
+
+    Optimizer.prototype.run = function(flow) {
+      var rule, _i, _len, _ref;
+      _ref = this.rules;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        rule = _ref[_i];
+        flow = rule.run(flow);
+      }
       return flow;
     };
 
-    return Node;
+    /*
+      # Deprecated code below
+    */
 
-  })(gg.wf.rule.Rule);
+
+    Optimizer.findSplit = function(flow) {
+      var flows, isSame, search, source, _i, _len, _ref;
+      isSame = function(n1, n2) {
+        if (n1 != null) {
+          return n1.location === n2.location;
+        } else {
+          return true;
+        }
+      };
+      search = function(prev, prevNonBarrier, cur, prevflow) {
+        var child, _i, _len, _ref, _results;
+        if (isSame(prev, cur)) {
+          if (prev != null) {
+            prevflow.connect(prev, cur);
+          } else {
+            prevflow.add(cur);
+          }
+          if (cur.type !== 'barrier') {
+            prevNonBarrier = cur;
+            if (prev != null) {
+              prevflow.connectBridge(prevNonBarrier, cur);
+            }
+          }
+        } else {
+          console.log("not same: " + prev.name + "\t" + cur.name);
+          prevflow = new gg.wf.Flow(flow.spec);
+          flows.push(prevflow);
+          prevflow.add(cur);
+          prevNonBarrier = null;
+        }
+        _ref = flow.children(cur);
+        _results = [];
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          child = _ref[_i];
+          _results.push(search(cur, prevNonBarrier, child, prevflow));
+        }
+        return _results;
+      };
+      flows = [new gg.wf.Flow(flow.spec)];
+      _ref = flow.sources();
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        source = _ref[_i];
+        search(null, null, source, flows[0]);
+      }
+      _.each(flows, function(flow, idx) {
+        console.log("flow " + idx);
+        console.log(flow.toString());
+        return console.log;
+      });
+      return flows;
+    };
+
+    Optimizer.swapForSPC = function(flow, nodes) {
+      return _.each(nodes, function(node) {
+        var bcs, bps, cs, ps, rpc;
+        rpc = gg.wf.Optimizer.rpcify(node);
+        cs = flow.children(node);
+        bcs = flow.bridgedChildren(node);
+        ps = flow.parents(node);
+        bps = flow.bridgedParents(node);
+        flow.graph.rm(node);
+        flow.add(rpc);
+        _.each(cs, function(c) {
+          return flow.connect(rpc, c);
+        });
+        _.each(bcs, function(c) {
+          return flow.connectBridge(rpc, c);
+        });
+        _.each(ps, function(p) {
+          return flow.connect(p, rpc);
+        });
+        return _.each(bps, function(p) {
+          return flow.connectBridge(p, rpc);
+        });
+      });
+    };
+
+    Optimizer.rpcify = function(node) {
+      var klass, rpc;
+      if (/RPC/.test(node.constructor.name)) {
+        return node;
+      }
+      if (node.params.get('location') === "client") {
+        return node;
+      }
+      klass = node.type === 'barrier' ? gg.wf.RPCBarrier : _.isSubclass(node, gg.wf.Source) ? gg.wf.RPCSource : _.isSubclass(node, gg.wf.Split) ? gg.wf.RPCSplit : _.isSubclass(node, gg.wf.Merge) ? gg.wf.RPCMerge : gg.wf.RPC;
+      rpc = new klass({
+        name: "rpc-" + node.name,
+        params: node.params
+      });
+      return rpc;
+    };
+
+    Optimizer.prototype.dynamicrpcify = function(node) {
+      _.each(node.inputs, function() {
+        return rpc.addInputPort();
+      });
+      _.times(node.inputs.length, function(idx) {
+        var parent, parentpairs, pid, poutport, _i, _len, _ref, _results;
+        parentpairs = _.compact(_.map(node.parent2in, function(pair, inport) {
+          if (idx === inport) {
+            return pair;
+          }
+        }));
+        _results = [];
+        for (_i = 0, _len = parentpairs.length; _i < _len; _i++) {
+          _ref = parentpairs[_i], pid = _ref[0], poutport = _ref[1];
+          parent = _.first(_.filter(node.parents, function(p) {
+            return p.id === pid;
+          }));
+          parent.addOutputHandler(poutport, rpc.getAddInputCB(idx));
+          _results.push(rpc.addParent(parent, poutport, idx));
+        }
+        return _results;
+      });
+      _.each(_.keys(node.in2out), function(inport) {
+        var child, childCb, childport, outport, _i, _len, _ref, _results;
+        _ref = node.in2out[inport];
+        _results = [];
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          outport = _ref[_i];
+          childport = node.out2child[outport];
+          child = node.children[outport];
+          childCb = child.getAddInputCB(childport);
+          console.log("addoutput " + outport + "\t" + child.name + ".port(" + childCb.port + ")");
+          rpc.addChild(child, childCb);
+          _results.push(rpc.connectPorts(inport, outport, childport));
+        }
+        return _results;
+      });
+      _.each(node.listeners('output'), function(l) {
+        return rpc.on('output', l);
+      });
+      rpc.inputs = _.clone(node.inputs);
+      console.log("rpcified node");
+      console.log(node);
+      console.log(rpc);
+      return rpc;
+    };
+
+    return Optimizer;
+
+  })();
 
   gg.stat.Stat = (function(_super) {
 
     __extends(Stat, _super);
 
-    function Stat() {
-      return Stat.__super__.constructor.apply(this, arguments);
+    function Stat(spec) {
+      this.spec = spec != null ? spec : {};
+      Stat.__super__.constructor.apply(this, arguments);
+      this.map = null;
     }
+
+    Stat.prototype.parseSpec = function() {
+      var mapSpec;
+      Stat.__super__.parseSpec.apply(this, arguments);
+      if (_.findGoodAttr(this.spec, ['aes', 'aesthetic', 'mapping', 'map'], null) != null) {
+        mapSpec = _.clone(this.spec);
+        if (mapSpec.name == null) {
+          mapSpec.name = "stat-map";
+        }
+        return this.map = gg.xform.Mapper.fromSpec(mapSpec);
+      }
+    };
+
+    Stat.prototype.compile = function() {
+      var node, ret;
+      node = Stat.__super__.compile.apply(this, arguments);
+      ret = [];
+      if (this.map != null) {
+        ret.push(this.map.compile());
+      }
+      ret.push(node);
+      return _.compact(_.flatten(ret));
+    };
 
     Stat.klasses = [];
 
@@ -15698,7 +14464,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Stat.getKlasses = function() {
       var klasses, ret;
-      klasses = this.klasses.concat([gg.stat.Identity, gg.stat.Bin1D, gg.stat.Boxplot, gg.stat.Loess, gg.stat.Sort, gg.stat.CDF, gg.stat.Bin2D]);
+      klasses = this.klasses.concat([gg.stat.IdentityStat, gg.stat.Bin1DStat, gg.stat.BoxplotStat, gg.stat.LoessStat, gg.stat.SortStat]);
       ret = {};
       _.each(klasses, function(klass) {
         if (_.isArray(klass.aliases)) {
@@ -15721,7 +14487,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       } else {
         type = _.findGood([spec.type, spec.stat, "identity"]);
       }
-      klass = klasses[type] || gg.stat.Identity;
+      klass = klasses[type] || gg.stat.IdentityStat;
       ret = new klass(spec);
       this.log("klass " + klass.name + " from type: " + type);
       return ret;
@@ -15753,10 +14519,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Geom.prototype.posMapping = function() {
-      return {};
-    };
-
-    Geom.prototype.scaleConfigs = function() {
       return {};
     };
 
@@ -15884,25 +14646,171 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.geom.Geom);
 
-  gg.wf.rule.RmDebug = (function(_super) {
+  gg.wf.rpc.Util = (function() {
 
-    __extends(RmDebug, _super);
+    function Util() {}
 
-    function RmDebug() {
-      return RmDebug.__super__.constructor.apply(this, arguments);
-    }
-
-    RmDebug.prototype.compute = function(node) {
-      if (_.isType(node, gg.wf.Stdout) || _.isType(node, gg.wf.Scales)) {
-        return null;
-      } else {
-        return node;
-      }
+    Util.serialize = function(inputs, params) {
+      var inputsJSONs, paramsJSON, payload, removedEls;
+      removedEls = gg.wf.Inputs.mapLeaves(inputs, function(data) {
+        return {
+          svg: data.env.rm('svg')
+        };
+      });
+      inputsJSONs = _.toJSON(inputs);
+      paramsJSON = params != null ? params.toJSON() : null;
+      payload = {
+        inputs: inputsJSONs,
+        params: paramsJSON
+      };
+      return [payload, removedEls];
     };
 
-    return RmDebug;
+    Util.deserialize = function(respData, removedEls) {
+      var inputs, mergeREs;
+      if (removedEls == null) {
+        removedEls = null;
+      }
+      inputs = _.fromJSON(respData.inputs);
+      mergeREs = function(arr, res) {
+        var idx, _i, _len, _ref, _results;
+        if (!_.isArray(res)) {
+          gg.wf.Inputs.mapLeaves(arr, function(data) {
+            return data.env.merge(res);
+          });
+          return;
+        }
+        if (arr.length !== res.length) {
+          throw Error("rpc.deserialize: data len (" + arr.length + ") !=          removedEls len (" + res.length + ")");
+        }
+        _ref = _.range(arr.length);
+        _results = [];
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          idx = _ref[_i];
+          _results.push(mergeREs(arr[idx], res[idx]));
+        }
+        return _results;
+      };
+      if (removedEls != null) {
+        mergeREs(inputs, removedEls);
+      }
+      return inputs;
+    };
 
-  })(gg.wf.rule.Node);
+    return Util;
+
+  })();
+
+  gg.wf.rule.Node = (function(_super) {
+
+    __extends(Node, _super);
+
+    function Node(spec) {
+      if (spec == null) {
+        spec = {};
+      }
+      Node.__super__.constructor.apply(this, arguments);
+    }
+
+    Node.prototype.compute = function(node) {
+      return node;
+    };
+
+    Node.prototype.run = function(flow) {
+      var _this = this;
+      _.each(flow.nodes(), function(node) {
+        var replacements;
+        replacements = _this.compute(node);
+        if (!_.isArray(replacements)) {
+          replacements = [replacements];
+        }
+        replacements = _.compact(replacements);
+        return gg.wf.rule.Node.replace(flow, node, replacements);
+      });
+      return flow;
+    };
+
+    Node.validateReplacement = function(orig, news) {
+      var origClass, typeToClass;
+      if (!(news.length > 0)) {
+        return true;
+      }
+      typeToClass = function(type) {
+        switch (type) {
+          case "barrier":
+            return "barrier";
+          case "multicast":
+            return "multicast";
+          default:
+            return "normal";
+        }
+      };
+      origClass = typeToClass(orig);
+      return _.all(news, function(n) {
+        return typeToClass(n) === origClass;
+      });
+    };
+
+    Node.replace = function(flow, node, replacements) {
+      var bcs, bps, cs, cur, lastnonbarrier, pre, prev, ps, _i, _j, _len, _len1,
+        _this = this;
+      if (!this.validateReplacement(node, replacements)) {
+        throw Error("Rule replacement types don't match.        Expected " + node.type + ", got " + (_.map(replacements(function(r) {
+          return r.type;
+        }))));
+      }
+      if (replacements.length === 0) {
+        return;
+      }
+      if (replacements.length === 1 && replacements[0] === node) {
+        return;
+      }
+      cs = flow.children(node);
+      bcs = flow.bridgedChildren(node);
+      ps = flow.parents(node);
+      bps = flow.bridgedParents(node);
+      flow.rm(node);
+      cur = prev = null;
+      lastnonbarrier = null;
+      for (_i = 0, _len = replacements.length; _i < _len; _i++) {
+        cur = replacements[_i];
+        if (prev != null) {
+          flow.connect(prev, cur);
+        } else {
+          _.each(ps, function(p) {
+            return flow.connect(p, cur);
+          });
+          _.each(bps, function(p) {
+            return flow.connectBridge(p, cur);
+          });
+        }
+        if (cur.type !== "barrier") {
+          lastnonbarrier = cur;
+        }
+        prev = cur;
+      }
+      if (lastnonbarrier != null) {
+        _.each(cs, function(c) {
+          return flow.connect(cur, c);
+        });
+        _.each(bcs, function(c) {
+          return flow.connectBridge(cur, c);
+        });
+      }
+      prev = null;
+      for (_j = 0, _len1 = replacements.length; _j < _len1; _j++) {
+        cur = replacements[_j];
+        if (cur.type !== "barrier") {
+          flow.connectBridge(prev, cur);
+          pre = cur;
+        }
+      }
+      return flow;
+    };
+
+    return Node;
+
+  })(gg.wf.rule.Rule);
 
   gg.wf.rule.RPCify = (function(_super) {
 
@@ -15938,151 +14846,55 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.wf.rule.Node);
 
-  gg.wf.rule.Cache = (function(_super) {
+  gg.wf.rule.EnvPut = (function(_super) {
 
-    __extends(Cache, _super);
+    __extends(EnvPut, _super);
 
-    function Cache() {
-      return Cache.__super__.constructor.apply(this, arguments);
+    EnvPut.ggpackage = "gg.wf.rule.EnvPut";
+
+    function EnvPut(spec) {
+      EnvPut.__super__.constructor.apply(this, arguments);
     }
 
-    Cache.ggpackage = "gg.wf.rule.Cache";
-
-    Cache.prototype.run = function(flow) {
-      var guid;
-      guid = this.params.get('guid');
-      if (this.canCache()) {
-        if (this.isCached(guid)) {
-          return this.useCachers(flow, guid);
-        } else {
-          return this.addCachers(flow, guid);
-        }
-      }
-    };
-
-    Cache.prototype.canCache = function() {
-      return this.getDB() != null;
-    };
-
-    Cache.prototype.getDB = function() {
-      if (typeof window === "undefined" || window === null) {
-        return null;
-      }
-      if (window.localStorage == null) {
-        return null;
-      }
-      return window.localStorage;
-    };
-
-    Cache.prototype.isCached = function(guid) {
-      var db, idx, ntables, _i;
-      db = this.getDB();
-      ntables = db[guid];
-      if (ntables == null) {
-        return false;
-      }
-      for (idx = _i = 0; 0 <= ntables ? _i < ntables : _i > ntables; idx = 0 <= ntables ? ++_i : --_i) {
-        if (db["" + guid + "-" + idx + "-table"] == null) {
-          return false;
-        }
-        if (db["" + guid + "-" + idx + "-md"] == null) {
-          return false;
-        }
-      }
-      return true;
-    };
-
-    Cache.prototype.getCacherSource = function(guid) {
-      return new gg.wf.CacheSource({
-        name: "" + guid + "-cacheSource",
-        params: {
-          guid: guid
-        }
-      });
-    };
-
-    Cache.prototype.getCacher = function(guid) {
-      return new gg.wf.Cache({
-        name: "" + guid + "-cacher",
-        params: {
-          guid: guid
-        }
-      });
-    };
-
-    Cache.prototype.addCachers = function(flow, guid) {
-      var p, renderer, renderers, _i, _len, _ref;
-      this.log("addCachers with guid: " + guid);
-      renderers = flow.find(function(n) {
-        return n.name === 'core-render';
-      });
-      if (renderers.length !== 1) {
-        return flow;
-      }
-      renderer = renderers[0];
-      this.log("adding cacher before " + renderer.name);
-      flow.insertBefore(this.getCacher(guid), renderer);
-      this.log("insert completed");
-      _ref = flow.parents(renderer);
+    EnvPut.prototype.run = function(flow) {
+      var child, children, envput, node, pairs, puts, source, sources, _i, _j, _len, _len1, _ref;
+      return flow;
+      pairs = {};
+      puts = [];
+      _ref = flow.nodes();
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        p = _ref[_i];
-        this.log("" + renderer.name + " parents: " + p.name);
+        node = _ref[_i];
+        if (node.type === "envput") {
+          _.extend(pairs, node.params.get("pairs"));
+          flow.rm(node);
+          this.log("removed " + node.name);
+        }
+      }
+      this.log(pairs);
+      envput = new gg.xform.EnvPut({
+        name: "envput",
+        params: {
+          pairs: pairs
+        }
+      });
+      sources = flow.sources();
+      for (_j = 0, _len1 = sources.length; _j < _len1; _j++) {
+        source = sources[_j];
+        children = flow.children(source);
+        if (children.length > 1) {
+          throw Error();
+        }
+        if (children.length === 0) {
+          continue;
+        }
+        child = children[0];
+        flow.insert(envput, source, child);
+        this.log("inserted new envput between " + source.name + " and " + child.name);
       }
       return flow;
     };
 
-    Cache.prototype.useCachers = function(flow, guid) {
-      var corerender, facetrender, geomrenders, gr, layers, multi, n, nodes, panerender, prev, setup, source, start, wf, _i, _j, _k, _len, _len1, _len2;
-      this.log("useCachers with guid: " + guid);
-      source = this.getCacherSource(guid);
-      start = flow.findOne(function(n) {
-        return _.isType(n, gg.wf.Start);
-      });
-      setup = flow.findOne(function(n) {
-        return n.name === 'graphic-setupenv';
-      });
-      corerender = flow.findOne(function(n) {
-        return n.name === 'core-render';
-      });
-      facetrender = flow.findOne(function(n) {
-        return n.name === 'facet-render';
-      });
-      panerender = flow.findOne(function(n) {
-        return n.name === 'render-panes';
-      });
-      geomrenders = flow.find(function(n) {
-        return n.constructor.ggpackage.search("^gg.geom.svg") >= 0;
-      });
-      multi = new gg.wf.NoCopyMulticast({
-        name: 'nc-multicast'
-      });
-      nodes = _.compact([start, source, setup, multi]);
-      layers = [corerender, facetrender, panerender];
-      wf = new gg.wf.Flow;
-      prev = null;
-      for (_i = 0, _len = nodes.length; _i < _len; _i++) {
-        n = nodes[_i];
-        if (prev != null) {
-          wf.connect(prev, n);
-          wf.connectBridge(prev, n);
-        }
-        prev = n;
-      }
-      for (_j = 0, _len1 = geomrenders.length; _j < _len1; _j++) {
-        gr = geomrenders[_j];
-        prev = multi;
-        for (_k = 0, _len2 = layers.length; _k < _len2; _k++) {
-          n = layers[_k];
-          wf.connect(prev, n);
-          prev = n;
-        }
-        wf.connect(prev, gr);
-        wf.connectBridge(multi, gr);
-      }
-      return wf;
-    };
-
-    return Cache;
+    return EnvPut;
 
   })(gg.wf.rule.Rule);
 
@@ -16098,36 +14910,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Source.type = "source";
 
-    Source.prototype.parseSpec = function() {
-      Source.__super__.parseSpec.apply(this, arguments);
-      this.params.ensure("tabletype", [], "row");
-      return this.params.ensure('compute', ['f'], null);
-    };
-
-    Source.prototype.compute = function(pairtable, params, cb) {
+    Source.prototype.compute = function(data, params) {
       throw Error("Source not setup to generate tables");
-    };
-
-    Source.prototype.run = function() {
-      var compute, params, pt,
-        _this = this;
-      if (!this.ready()) {
-        throw Error("node not ready");
-      }
-      params = this.params;
-      compute = this.params.get('compute') || this.compute.bind(this);
-      pt = this.inputs[0];
-      return compute(pt, params, function(err, pairtable) {
-        if (err != null) {
-          _this.error(err);
-        }
-        return _this.output(0, pairtable);
-      });
     };
 
     return Source;
 
-  })(gg.wf.Node);
+  })(gg.wf.Exec);
 
   gg.wf.TableSource = (function(_super) {
 
@@ -16143,17 +14932,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     TableSource.prototype.parseSpec = function() {
       TableSource.__super__.parseSpec.apply(this, arguments);
       if (!this.params.contains('table')) {
-        if ('table' in this.spec) {
-          return this.params.put('table', this.spec.table);
-        } else {
-          throw Error("TableSource needs a table as parameter");
-        }
+        throw Error("TableSource needs a table as parameter");
       }
     };
 
-    TableSource.prototype.compute = function(pt, params, cb) {
-      pt = new gg.data.PairTable(params.get('table'), pt.getMD());
-      return cb(null, pt);
+    TableSource.prototype.compute = function(data, params) {
+      data.table = params.get('table');
+      return data;
     };
 
     return TableSource;
@@ -16174,17 +14959,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     RowSource.prototype.parseSpec = function() {
       RowSource.__super__.parseSpec.apply(this, arguments);
       this.params.ensure("rows", ["array", "row"], null);
-      this.params.require("rows", "RowSource needs a table as parameter");
       if (this.params.get('rows') == null) {
         throw Error("RowSource needs a table as parameter");
       }
     };
 
-    RowSource.prototype.compute = function(pt, params, cb) {
-      var table;
-      table = gg.data.Table.fromArray(params.get('rows'), null, params.get('tabletype'));
-      pt = new gg.data.PairTable(table, pt.getMD());
-      return cb(null, pt);
+    RowSource.prototype.compute = function(data, params) {
+      data.table = gg.data.RowTable.fromArray(params.get('rows'));
+      return data;
     };
 
     return RowSource;
@@ -16205,18 +14987,23 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     CsvSource.prototype.parseSpec = function() {
       CsvSource.__super__.parseSpec.apply(this, arguments);
-      return this.params.require('url', 'CsvSource needs a URL');
+      if (!this.params.contains('url')) {
+        throw Error("CsvSource needs a URL");
+      }
     };
 
-    CsvSource.prototype.compute = function(pt, params, cb) {
-      var tabletype, url;
-      url = params.get('url');
-      tabletype = params.get('tabletype');
-      return d3.csv(url, function(err, arr) {
-        var table;
-        table = gg.data.Table.fromArray(arr, null, tabletype);
-        pt = new gg.data.PairTable(table, pt.getMD());
-        return cb(null, pt);
+    CsvSource.prototype.run = function() {
+      var url,
+        _this = this;
+      url = this.params.get("url");
+      return d3.csv(url, function(arr) {
+        var f, outputs, table;
+        table = gg.data.RowTable.fromArray(arr);
+        f = function(data) {
+          return new gg.wf.Data(table, data.env);
+        };
+        outputs = gg.wf.Inputs.mapLeaves(_this.inputs[0], f);
+        return _this.output(0, outputs);
       });
     };
 
@@ -16241,37 +15028,45 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.params.put("location", "server");
       this.params.ensure("uri", ["conn", "connection", "url"], null);
       this.params.ensure("query", ["q"], null);
-      this.params.require('uri', "SQLSource needs a connection URI: params.put 'uri', <URI>");
-      return this.params.require('query', "SQLSource needs a query string");
+      if (this.params.get("uri") == null) {
+        throw Error("SQLSource needs a connection URI: params.put 'uri', <URI>");
+      }
+      if (this.params.get("query") == null) {
+        throw Error("SQLSource needs a query string");
+      }
     };
 
-    SQLSource.prototype.compute = function(pt, params, cb) {
-      var client, query, tabletype, uri;
+    SQLSource.prototype.run = function() {
+      var client, query, uri,
+        _this = this;
       if (typeof pg === "undefined" || pg === null) {
         throw Error("pg is not allowed on the client side");
       }
-      uri = params.get("uri");
-      query = params.get("q");
-      tabletype = params.get('tabletype');
+      uri = this.params.get("uri");
+      query = this.params.get("q");
+      this.log.level = 0;
+      this.log(pg);
       this.log("uri: " + uri);
       this.log("query: " + query);
       client = new pg.Client(uri);
       return client.connect(function(err) {
         if (err != null) {
-          cb(err, null);
           throw Error(err);
         }
         return client.query(query, function(err, result) {
-          var rows, table;
+          var f, outputs, rows, table;
           if (err != null) {
-            cb(err, null);
             throw Error(err);
           }
           rows = result.rows;
+          table = gg.data.RowTable.fromArray(rows);
           client.end();
-          table = gg.data.Table.fromArray(rows, null, tabletype);
-          pt = new gg.data.PairTable(table, pt.getMD());
-          return cb(null, pt);
+          f = function(data) {
+            return new gg.wf.Data(table, data.env);
+          };
+          outputs = gg.wf.Inputs.mapLeaves(_this.inputs[0], f);
+          _this.log(outputs);
+          return _this.output(0, outputs);
         });
       });
     };
@@ -16280,356 +15075,187 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.wf.Source);
 
-  gg.wf.CacheSource = (function(_super) {
+  gg.wf.Split = (function(_super) {
 
-    __extends(CacheSource, _super);
+    __extends(Split, _super);
 
-    function CacheSource() {
-      return CacheSource.__super__.constructor.apply(this, arguments);
+    function Split() {
+      return Split.__super__.constructor.apply(this, arguments);
     }
 
-    CacheSource.ggpackage = "gg.wf.CacheSource";
+    Split.ggpackage = "gg.wf.Split";
 
-    CacheSource.prototype.construtor = function() {
-      CacheSource.__super__.construtor.apply(this, arguments);
-      return this.name = "CacheSource";
+    Split.type = "split";
+
+    Split.prototype.parseSpec = function() {
+      return this.params.ensureAll({
+        gbkeyName: [['key'], this.name],
+        splitFunc: [['f'], this.splitFunc]
+      });
     };
 
-    CacheSource.prototype.parseSpec = function() {
-      CacheSource.__super__.parseSpec.apply(this, arguments);
-      if (!this.params.has('guid')) {
-        throw Error("can't run cache source without a guid key");
+    Split.prototype.splitFunc = function(table, params) {
+      return [
+        {
+          table: table,
+          key: null
+        }
+      ];
+    };
+
+    Split.prototype.compute = function(data, params) {
+      var datas, env, gbkeyName, groups, splitFunc, str, table,
+        _this = this;
+      table = data.table;
+      env = data.env;
+      splitFunc = params.get('splitFunc');
+      if (!_.isFunction(splitFunc)) {
+        splitFunc = this.splitFunc;
       }
-    };
-
-    CacheSource.prototype.compute = function(pt, params, cb) {
-      var db, guid, idx, keyprefix, md, mdkey, ntables, partitions, t, tkey, _i;
-      guid = params.get('guid');
-      db = gg.wf.Cache.getDB();
-      ntables = parseInt(db[guid]);
-      partitions = [];
-      for (idx = _i = 0; 0 <= ntables ? _i < ntables : _i > ntables; idx = 0 <= ntables ? ++_i : --_i) {
-        keyprefix = "" + guid + "-" + idx;
-        tkey = "" + keyprefix + "-table";
-        mdkey = "" + keyprefix + "-md";
-        t = gg.data.Table.deserialize(db[tkey]);
-        md = gg.data.Table.deserialize(db[mdkey]);
-        partitions.push(new gg.data.PairTable(t, md));
+      groups = splitFunc(table, params);
+      if (!((groups != null) && _.isArray(groups))) {
+        str = "Non-array result from calling split function";
+        throw Error(str);
       }
-      if (partitions.length === 1) {
-        return cb(null, partitions[0]);
-      } else {
-        return cb(null, new gg.data.TableSet(partitions));
+      gbkeyName = params.get('gbkeyName');
+      this.log("" + groups.length + " partitions");
+      datas = _.map(groups, function(group, idx) {
+        var key, newData, subtable;
+        subtable = group.table;
+        key = group.key;
+        newData = new gg.wf.Data(subtable, env.clone());
+        newData.env.put(gbkeyName, key);
+        return newData;
+      });
+      return datas;
+    };
+
+    Split.prototype.run = function() {
+      var f, idx, output, outputs, pstore, str, _i, _len,
+        _this = this;
+      if (!this.ready()) {
+        str = "Split not ready, expects " + this.inputs.length + " inputs";
+        throw Error(str);
       }
+      pstore = this.pstore();
+      f = function(data, inpath) {
+        var res;
+        res = _this.compute(data, _this.params);
+        _.times(res.length, function(lastIdx) {
+          var outpath;
+          outpath = _.clone(inpath);
+          outpath.push(lastIdx);
+          return pstore.writeData(outpath, inpath);
+        });
+        return res;
+      };
+      outputs = gg.wf.Inputs.mapLeaves(this.inputs, f);
+      for (idx = _i = 0, _len = outputs.length; _i < _len; idx = ++_i) {
+        output = outputs[idx];
+        this.output(idx, output);
+      }
+      return outputs;
     };
 
-    return CacheSource;
-
-  })(gg.wf.Source);
-
-  gg.wf.Start = (function(_super) {
-
-    __extends(Start, _super);
-
-    function Start() {
-      return Start.__super__.constructor.apply(this, arguments);
-    }
-
-    Start.ggpackage = "gg.wf.Start";
-
-    Start.type = "start";
-
-    Start.prototype.ready = function() {
-      return true;
-    };
-
-    Start.prototype.run = function() {
-      var result;
-      this.pstore().writeData([0], []);
-      result = new gg.data.PairTable;
-      return this.output(0, result);
-    };
-
-    return Start;
+    return Split;
 
   })(gg.wf.Node);
 
-  try {
-    timer = performance;
-  } catch (err) {
-    timer = Date;
-  }
+  gg.wf.Partition = (function(_super) {
 
-  gg.wf.Runner = (function(_super) {
+    __extends(Partition, _super);
 
-    __extends(Runner, _super);
+    Partition.ggpackage = "gg.wf.Partition";
 
-    Runner.ggpackage = "gg.wf.Runner";
-
-    function Runner(flow, xferControl) {
-      var _this = this;
-      this.flow = flow;
-      this.log = gg.util.Log.logger(this.constructor.ggpackage, "Runner");
-      this.done = {};
-      this.seen = {};
-      this.setupQueue();
-      this.ch = new gg.wf.ClearingHouse(this, null);
-      this.ch.on("output", function() {
-        var args;
-        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-        return _this.emit.apply(_this, ["output"].concat(__slice.call(args)));
-      });
-      if (xferControl != null) {
-        this.ch.xferControl = xferControl;
-      }
-      this.flow.graph.bfs(function(node) {
-        return node.on("output", function() {
-          var args, o, _ref;
-          args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-          if (node.id in _this.debug) {
-            o = _this.debug[node.id];
-            o['end'] = timer.now();
-            o['cost'] = o['end'] - o['start'];
-          }
-          return (_ref = _this.ch).push.apply(_ref, args);
-        });
-      });
-      this.debug = {};
+    function Partition() {
+      Partition.__super__.constructor.apply(this, arguments);
+      this.name = this.spec.name || ("partition-" + this.id);
     }
 
-    Runner.prototype.setupQueue = function() {
-      var ondrain, qworker,
+    Partition.prototype.splitFunc = function(table, params) {
+      var gbfunc;
+      gbfunc = params.get('f');
+      if (!((gbfunc != null) && _.isFunction(gbfunc))) {
+        gbfunc = (function() {
+          return "1";
+        });
+      }
+      return table.split(gbfunc);
+    };
+
+    return Partition;
+
+  })(gg.wf.Split);
+
+  gg.wf.PartitionCols = (function(_super) {
+
+    __extends(PartitionCols, _super);
+
+    PartitionCols.ggpackage = "gg.wf.PartitionCols";
+
+    function PartitionCols() {
+      PartitionCols.__super__.constructor.apply(this, arguments);
+      this.name = this.spec.name || ("partitioncols-" + this.id);
+    }
+
+    PartitionCols.prototype.parseSpec = function() {
+      var cols;
+      PartitionCols.__super__.parseSpec.apply(this, arguments);
+      cols = this.params.get('cols');
+      if (cols == null) {
+        cols = [this.params.get('col')];
+      }
+      cols = _.compact(_.flatten(cols));
+      if (!((cols != null) && cols.length > 0)) {
+        this.log.info("PartitionCols setup with 0 cols");
+      }
+      return this.params.put('cols', cols);
+    };
+
+    PartitionCols.prototype.compute = function(data, params) {
+      var cols, datas, env, f, gbkeyName, groups, table, _ref,
         _this = this;
-      qworker = function(node, cb) {
-        if (!_this.nodeCanRun(node)) {
-          cb();
-          return;
-        }
-        _this.seen[node.id] = true;
-        _this.runNode(node);
-        return cb();
-      };
-      ondrain = function() {
-        if (_.all(_this.flow.sinks(), function(s) {
-          return _this.done[s.id];
-        })) {
-          _this.log("done! can you believe it?");
-          return _this.emit('done', _this.debug);
-        }
-      };
-      this.queue = new async.queue(qworker, 1);
-      return this.queue.drain = ondrain;
-    };
-
-    Runner.prototype.runNode = function(node) {
-      this.log("runNode: " + node.name + " in(" + node.inputs.length + ")          out(" + node.nChildren + ") running");
-      this.debug[node.id] = {
-        start: timer.now(),
-        name: node.name,
-        id: node.id
-      };
-      return node.run();
-    };
-
-    Runner.prototype.nodeCanRun = function(node) {
-      if (node.id in this.seen) {
-        this.log("\t" + node.name + " seen. skipping");
-        return false;
-      }
-      if (!node.ready()) {
-        this.log("\t" + node.name + " skip:            " + (node.nReady()) + " of " + node.nParents + " inputs ready");
-        return false;
-      }
-      return true;
-    };
-
-    Runner.prototype.setDone = function(nodeid) {
-      if (nodeid != null) {
-        return this.done[nodeid] = true;
-      }
-    };
-
-    Runner.prototype.tryRun = function(node) {
-      return this.queue.push(node);
-    };
-
-    Runner.prototype.run = function() {
-      var _this = this;
-      return _.each(this.flow.sources(), function(source) {
-        _this.log("adding source " + source.name);
-        return _this.queue.push(source);
-      });
-    };
-
-    return Runner;
-
-  })(events.EventEmitter);
-
-  gg.wf.Optimizer = (function() {
-
-    function Optimizer(rules) {
-      this.rules = rules;
-      if (!_.isArray(this.rules)) {
-        this.rules = [this.rules];
-      }
-    }
-
-    Optimizer.prototype.run = function(flow) {
-      var rule, _i, _len, _ref;
-      _ref = this.rules;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        rule = _ref[_i];
-        flow = rule.run(flow);
-      }
-      return flow;
-    };
-
-    /*
-      # Deprecated code below
-    */
-
-
-    Optimizer.findSplit = function(flow) {
-      var flows, isSame, search, source, _i, _len, _ref;
-      isSame = function(n1, n2) {
-        if (n1 != null) {
-          return n1.location === n2.location;
-        } else {
-          return true;
-        }
-      };
-      search = function(prev, prevNonBarrier, cur, prevflow) {
-        var child, _i, _len, _ref, _results;
-        if (isSame(prev, cur)) {
-          if (prev != null) {
-            prevflow.connect(prev, cur);
-          } else {
-            prevflow.add(cur);
-          }
-          if (cur.type !== 'barrier') {
-            prevNonBarrier = cur;
-            if (prev != null) {
-              prevflow.connectBridge(prevNonBarrier, cur);
-            }
-          }
-        } else {
-          prevflow = new gg.wf.Flow(flow.spec);
-          flows.push(prevflow);
-          prevflow.add(cur);
-          prevNonBarrier = null;
-        }
-        _ref = flow.children(cur);
-        _results = [];
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          child = _ref[_i];
-          _results.push(search(cur, prevNonBarrier, child, prevflow));
-        }
-        return _results;
-      };
-      flows = [new gg.wf.Flow(flow.spec)];
-      _ref = flow.sources();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        source = _ref[_i];
-        search(null, null, source, flows[0]);
-      }
-      return flows;
-    };
-
-    Optimizer.swapForSPC = function(flow, nodes) {
-      return _.each(nodes, function(node) {
-        var bcs, bps, cs, ps, rpc;
-        rpc = gg.wf.Optimizer.rpcify(node);
-        cs = flow.children(node);
-        bcs = flow.bridgedChildren(node);
-        ps = flow.parents(node);
-        bps = flow.bridgedParents(node);
-        flow.graph.rm(node);
-        flow.add(rpc);
-        _.each(cs, function(c) {
-          return flow.connect(rpc, c);
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+      cols = params.get('cols');
+      gbkeyName = params.get('gbkeyName');
+      this.log("split on cols: " + cols);
+      if (!((cols != null) && (cols[0] != null))) {
+        this.log("no cols, using original table");
+        data.env.put(gbkeyName, null);
+        datas = [data];
+      } else {
+        f = function(row) {
+          return _.first(_.map(cols, (function(col) {
+            return row.get(col);
+          })));
+        };
+        groups = data.table.split(f);
+        this.log("" + groups.length + " partitions");
+        datas = _.map(groups, function(group, idx) {
+          var key, newData, subtable;
+          subtable = group.table;
+          key = group.key;
+          newData = new gg.wf.Data(subtable, env.clone());
+          newData.env.put(gbkeyName, key);
+          return newData;
         });
-        _.each(bcs, function(c) {
-          return flow.connectBridge(rpc, c);
-        });
-        _.each(ps, function(p) {
-          return flow.connect(p, rpc);
-        });
-        return _.each(bps, function(p) {
-          return flow.connectBridge(p, rpc);
-        });
-      });
-    };
-
-    Optimizer.rpcify = function(node) {
-      var klass, rpc;
-      if (/RPC/.test(node.constructor.name)) {
-        return node;
       }
-      if (node.params.get('location') === "client") {
-        return node;
-      }
-      klass = node.type === 'barrier' ? gg.wf.RPCBarrier : _.isSubclass(node, gg.wf.Source) ? gg.wf.RPCSource : _.isSubclass(node, gg.wf.Split) ? gg.wf.RPCSplit : _.isSubclass(node, gg.wf.Merge) ? gg.wf.RPCMerge : gg.wf.RPC;
-      rpc = new klass({
-        name: "rpc-" + node.name,
-        params: node.params
-      });
-      return rpc;
+      return datas;
     };
 
-    Optimizer.prototype.dynamicrpcify = function(node) {
-      _.each(node.inputs, function() {
-        return rpc.addInputPort();
-      });
-      _.times(node.inputs.length, function(idx) {
-        var parent, parentpairs, pid, poutport, _i, _len, _ref, _results;
-        parentpairs = _.compact(_.map(node.parent2in, function(pair, inport) {
-          if (idx === inport) {
-            return pair;
-          }
-        }));
-        _results = [];
-        for (_i = 0, _len = parentpairs.length; _i < _len; _i++) {
-          _ref = parentpairs[_i], pid = _ref[0], poutport = _ref[1];
-          parent = _.first(_.filter(node.parents, function(p) {
-            return p.id === pid;
-          }));
-          parent.addOutputHandler(poutport, rpc.getAddInputCB(idx));
-          _results.push(rpc.addParent(parent, poutport, idx));
-        }
-        return _results;
-      });
-      _.each(_.keys(node.in2out), function(inport) {
-        var child, childCb, childport, outport, _i, _len, _ref, _results;
-        _ref = node.in2out[inport];
-        _results = [];
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          outport = _ref[_i];
-          childport = node.out2child[outport];
-          child = node.children[outport];
-          childCb = child.getAddInputCB(childport);
-          rpc.addChild(child, childCb);
-          _results.push(rpc.connectPorts(inport, outport, childport));
-        }
-        return _results;
-      });
-      _.each(node.listeners('output'), function(l) {
-        return rpc.on('output', l);
-      });
-      rpc.inputs = _.clone(node.inputs);
-      return rpc;
-    };
+    return PartitionCols;
 
-    return Optimizer;
-
-  })();
+  })(gg.wf.Split);
 
   gg.facet.base.Facets = (function() {
 
     Facets.ggpackage = "gg.facet.base.Facets";
 
-    Facets.facetKeys = "facet-keys";
+    Facets.facetXKey = "facet-x";
 
-    Facets.facetId = "facet-id";
+    Facets.facetYKey = "facet-y";
+
+    Facets.facetXYKeys = "facet-xy";
 
     function Facets(g, spec) {
       var layoutParams;
@@ -16637,7 +15263,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.spec = spec != null ? spec : {};
       this.log = gg.util.Log.logger(this.ggpackage, "Facets");
       this.parseSpec();
-      this.labeler = this.labelerNodes();
+      this.splitter = this.splitterNodes();
       this.trainer = new gg.scale.train.Master({
         name: 'facet_train'
       }).compile();
@@ -16658,7 +15284,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     }
 
     Facets.prototype.parseSpec = function() {
-      var fClass, ncol, nrow, xattrs, yattrs;
+      var fClass, xattrs, yattrs;
       this.splitParams = new gg.util.Params({
         x: _.findGood([this.spec.x, null]),
         y: _.findGood([this.spec.y, null]),
@@ -16669,13 +15295,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
       xattrs = ['showx', 'showX', 'showXAxis'];
       yattrs = ['showy', 'showY', 'showYAxis'];
-      ncol = ["ncols", "ncol", "nys", "ny"];
-      nrow = ["nrows", "nrow", "nxs", "nx"];
       this.layoutParams = new gg.util.Params({
         showXAxis: _.findGoodAttr(this.spec, xattrs, true),
         showYAxis: _.findGoodAttr(this.spec, yattrs, true),
-        ncol: _.findGoodAttr(this.spec, ncol, null),
-        nrow: _.findGoodAttr(this.spec, nrow, null),
         paddingPane: this.spec.padding || this.spec.paddingPane || 5,
         margin: this.spec.margin || 1,
         options: this.g.options
@@ -16695,40 +15317,31 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
+    Facets.prototype.splitterNodes = function() {
+      var facetXKey, facetXNode, facetYKey, facetYNode, x, y;
+      facetXKey = gg.facet.base.Facets.facetXKey;
+      facetYKey = gg.facet.base.Facets.facetYKey;
+      x = _.flatten([this.splitParams.get('x')]);
+      y = _.flatten([this.splitParams.get('y')]);
+      facetXNode = new gg.wf.PartitionCols({
+        name: 'facet-x',
+        params: {
+          key: facetXKey,
+          cols: x
+        }
+      });
+      facetYNode = new gg.wf.PartitionCols({
+        name: 'facet-y',
+        params: {
+          key: facetYKey,
+          cols: y
+        }
+      });
+      return [facetXNode, facetYNode];
+    };
+
     Facets.prototype.labelerNodes = function() {
-      var f, log;
-      log = this.log;
-      f = function(pairtable, params) {
-        var md, mmapping, pt, t, tmapping, xcol, ycol;
-        t = pairtable.getTable();
-        md = pairtable.getMD();
-        xcol = params.get('x');
-        ycol = params.get('y');
-        log("x/ycols: " + xcol + "/" + ycol);
-        tmapping = {
-          'facet-x': xcol,
-          'facet-y': ycol
-        };
-        tmapping = _.mappingToFunctions(t, tmapping);
-        t = gg.data.Transform.transform(t, tmapping);
-        pt = new gg.data.PairTable(t, md);
-        pt = pt.ensure(['facet-x', 'facet-y']);
-        md = pt.getMD();
-        mmapping = [
-          [
-            'facet-keys', (function(row) {
-              return "key-" + (row.get('facet-x')) + "-" + (row.get('facet-y'));
-            }), gg.data.Schema.ordinal
-          ], [
-            'facet-id', (function(row) {
-              return "facet-" + (row.get('facet-x')) + "-" + (row.get('facet-y'));
-            }), gg.data.Schema.ordinal
-          ]
-        ];
-        md = gg.data.Transform.transform(md, mmapping);
-        return new gg.data.PairTable(pt.getTable(), md);
-      };
-      return gg.wf.SyncBarrier.create(f, this.splitParams, 'facet-labeler');
+      throw Error("labeler not implemented");
     };
 
     Facets.fromSpec = function(g, spec) {
@@ -16799,52 +15412,124 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })();
 
-  gg.wf.rpc.Util = (function() {
+  gg.wf.Start = (function(_super) {
 
-    function Util() {}
+    __extends(Start, _super);
 
-    Util.serialize = function(pairtable, params) {
-      var clientCols, col, md, paramsJSON, payload, removedEls, _i, _len;
-      md = pairtable.getMD();
-      clientCols = ['svg', 'event'];
-      removedEls = _.o2map(clientCols, function(col) {
-        if (md.has(col)) {
-          return [col, md.getColumn(col)];
-        }
+    function Start() {
+      return Start.__super__.constructor.apply(this, arguments);
+    }
+
+    Start.ggpackage = "gg.wf.Start";
+
+    Start.type = "start";
+
+    Start.prototype.ready = function() {
+      return true;
+    };
+
+    Start.prototype.run = function() {
+      var data, outputs;
+      data = new gg.wf.Data(null);
+      outputs = [data];
+      this.pstore().writeData([0], []);
+      this.output(0, outputs);
+      return outputs;
+    };
+
+    return Start;
+
+  })(gg.wf.Node);
+
+  gg.wf.Runner = (function(_super) {
+
+    __extends(Runner, _super);
+
+    Runner.ggpackage = "gg.wf.Runner";
+
+    function Runner(flow, xferControl) {
+      var _this = this;
+      this.flow = flow;
+      this.log = gg.util.Log.logger(this.constructor.ggpackage, "Runner");
+      this.done = {};
+      this.seen = {};
+      this.setupQueue();
+      this.ch = new gg.wf.ClearingHouse(this, null);
+      this.ch.on("output", function() {
+        var args;
+        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+        return _this.emit.apply(_this, ["output"].concat(__slice.call(args)));
       });
-      for (_i = 0, _len = clientCols.length; _i < _len; _i++) {
-        col = clientCols[_i];
-        md = md.rmColumn(col);
+      if (xferControl != null) {
+        this.ch.xferControl = xferControl;
       }
-      paramsJSON = params != null ? params.toJSON() : null;
-      payload = {
-        table: pairtable.getTable().toJSON(),
-        md: pairtable.getMD().toJSON(),
-        params: paramsJSON
-      };
-      return [payload, removedEls];
-    };
+      this.flow.graph.bfs(function(node) {
+        return node.on("output", _this.ch.push.bind(_this.ch));
+      });
+    }
 
-    Util.deserialize = function(respData, removedEls) {
-      var col, colData, md, table;
-      if (removedEls == null) {
-        removedEls = {};
-      }
-      table = gg.data.Table.fromJSON(respData.table);
-      md = gg.data.Table.fromJSON(respData.md);
-      for (col in removedEls) {
-        colData = removedEls[col];
-        if (colData.length !== md.nrows()) {
-          throw Error("rpc.deserialize: data len (" + (md.nrows()) + ") !=          removedEls len (" + colData.length + ") on col " + col);
+    Runner.prototype.setupQueue = function() {
+      var ondrain, qworker,
+        _this = this;
+      qworker = function(node, cb) {
+        if (!_this.nodeCanRun(node)) {
+          cb();
+          return;
         }
-        md = md.addColumn(col, colData);
-      }
-      return new gg.data.PairTable(table, md);
+        _this.seen[node.id] = true;
+        _this.runNode(node);
+        return cb();
+      };
+      ondrain = function() {
+        if (!_.all(_this.flow.sinks(), function(s) {
+          return _this.done[s.id];
+        })) {
+          _this.log("done! can you believe it?");
+          return _this.emit('done', true);
+        }
+      };
+      this.queue = new async.queue(qworker, 1);
+      return this.queue.drain = ondrain;
     };
 
-    return Util;
+    Runner.prototype.runNode = function(node) {
+      this.log("runNode: " + node.name + " in(" + node.inputs.length + ")          out(" + node.nChildren + ") running");
+      return node.run();
+    };
 
-  })();
+    Runner.prototype.nodeCanRun = function(node) {
+      if (node.id in this.seen) {
+        this.log("\t" + node.name + " seen. skipping");
+        return false;
+      }
+      if (!node.ready()) {
+        this.log("\t" + node.name + " skip:            " + (node.nReady()) + " of " + node.nParents + " inputs ready");
+        return false;
+      }
+      return true;
+    };
+
+    Runner.prototype.setDone = function(nodeid) {
+      if (nodeid != null) {
+        return this.done[nodeid] = true;
+      }
+    };
+
+    Runner.prototype.tryRun = function(node) {
+      return this.queue.push(node);
+    };
+
+    Runner.prototype.run = function() {
+      var _this = this;
+      return _.each(this.flow.sources(), function(source) {
+        _this.log("adding source " + source.name);
+        return _this.queue.push(source);
+      });
+    };
+
+    return Runner;
+
+  })(events.EventEmitter);
 
   /*
   Send
@@ -16899,8 +15584,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       socket.on("error", onFail);
       if (connected) {
         return onConnect();
-      } else {
-        return socket.socket.connect();
       }
     };
 
@@ -17033,383 +15716,194 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(events.EventEmitter);
 
-  gg.wf.Multicast = (function(_super) {
+  gg.wf.Inputs = (function() {
 
-    __extends(Multicast, _super);
+    function Inputs() {}
 
-    function Multicast() {
-      return Multicast.__super__.constructor.apply(this, arguments);
-    }
-
-    Multicast.ggpackage = "gg.wf.Multicast";
-
-    Multicast.type = "multicast";
-
-    Multicast.prototype.run = function() {
-      var idx, pairtable, pstore, result, _i, _ref, _results;
-      if (!this.ready()) {
-        throw Error("Node not ready");
-      }
-      pairtable = this.inputs[0];
-      pstore = this.pstore();
-      _results = [];
-      for (idx = _i = 0, _ref = this.nChildren; 0 <= _ref ? _i < _ref : _i > _ref; idx = 0 <= _ref ? ++_i : --_i) {
-        result = idx === 0 ? pairtable : pairtable.clone();
-        _results.push(this.output(idx, result));
-      }
-      return _results;
+    Inputs.isLeafArray = function(arr) {
+      return (arr != null) && (arr.length === 0 || !_.isArray(arr[0]));
     };
 
-    return Multicast;
-
-  })(gg.wf.Node);
-
-  gg.wf.NoCopyMulticast = (function(_super) {
-
-    __extends(NoCopyMulticast, _super);
-
-    function NoCopyMulticast() {
-      return NoCopyMulticast.__super__.constructor.apply(this, arguments);
-    }
-
-    NoCopyMulticast.ggpackage = "gg.wf.NoCopyMulticast";
-
-    NoCopyMulticast.type = "nc-multicast";
-
-    NoCopyMulticast.prototype.run = function() {
-      var idx, p, pairtable, ps, pstore, _i, _len, _results;
-      if (!this.ready()) {
-        throw Error("Node not ready");
-      }
-      pairtable = this.inputs[0];
-      pstore = this.pstore();
-      ps = pairtable.partition('layer');
-      _results = [];
-      for (idx = _i = 0, _len = ps.length; _i < _len; idx = ++_i) {
-        p = ps[idx];
-        _results.push(this.output(idx, p));
-      }
-      return _results;
-    };
-
-    return NoCopyMulticast;
-
-  })(gg.wf.Node);
-
-  gg.wf.Block = (function(_super) {
-
-    __extends(Block, _super);
-
-    function Block() {
-      return Block.__super__.constructor.apply(this, arguments);
-    }
-
-    Block.ggpackage = "gg.wf.Block";
-
-    Block.type = "block";
-
-    Block.prototype.parseSpec = function() {
-      return this.params.ensure('compute', ['f'], null);
-    };
-
-    Block.prototype.compute = function(pairtable, params, cb) {
-      return cb(null, pairtable);
-    };
-
-    Block.prototype.run = function() {
-      var compute, params, pstore, tset,
-        _this = this;
-      if (!this.ready()) {
-        throw Error("node not ready");
-      }
-      params = this.params;
-      pstore = this.pstore();
-      compute = this.params.get('compute') || this.compute.bind(this);
-      tset = new gg.data.TableSet([this.inputs[0]]);
-      return compute(tset, params, function(err, pairtable) {
-        if (err != null) {
-          throw Error(err);
+    Inputs.pick = function(inputs, path) {
+      var cur, idx, _i, _len;
+      cur = inputs;
+      for (_i = 0, _len = path.length; _i < _len; _i++) {
+        idx = path[_i];
+        if (idx >= cur.length || !_.isArray(cur)) {
+          return null;
         }
-        return _this.output(0, pairtable);
-      });
-      /*
-          # Write provenance
-          pstore = @pstore()
-          id2path = _.o2map flat, (data, idx) -> [data.id, paths[idx]]
-          for data, idx in newdatas
-            if data.id of id2path
-              pstore.writeData [idx], id2path[data.id]
-            else
-              pstore.writeData [idx], null
-      */
-
+        cur = cur[idx];
+      }
+      return cur;
     };
 
-    return Block;
-
-  })(gg.wf.Node);
-
-  gg.wf.SyncBlock = (function(_super) {
-
-    __extends(SyncBlock, _super);
-
-    function SyncBlock() {
-      return SyncBlock.__super__.constructor.apply(this, arguments);
-    }
-
-    SyncBlock.prototype.parseSpec = function() {
-      var compute, f, name;
-      SyncBlock.__super__.parseSpec.apply(this, arguments);
-      name = this.name;
-      f = this.params.get('compute');
-      if (f == null) {
-        f = this.compute.bind(this);
+    Inputs.mapLeafArrays = function(inputs, f, path) {
+      if (path == null) {
+        path = [];
       }
-      compute = function(pairtable, params, cb) {
+      if (inputs == null) {
+        return;
+      }
+      if (inputs.length === 0) {
+        return inputs;
+      }
+      return _.map(inputs, function(subinput, idx) {
         var res;
-        try {
-          res = f(pairtable, params, function() {
-            throw Error("SyncBlock should not call callcack");
-          });
-          return cb(null, res);
-        } catch (err) {
-          console.log("error in syncblock " + name);
-          console.log(err.toString());
-          return cb(err, null);
+        path.push(idx);
+        res = gg.wf.Inputs.isLeafArray(subinput) ? f(subinput, _.clone(path)) : gg.wf.Inputs.mapLeafArrays(subinput, f, path);
+        path.pop();
+        return res;
+      });
+    };
+
+    Inputs.mapLeaves = function(inputs, f, path) {
+      if (path == null) {
+        path = [];
+      }
+      if (inputs == null) {
+        return;
+      }
+      if (_.isArray(inputs)) {
+        return _.map(inputs, function(input, idx) {
+          var res;
+          path.push(idx);
+          res = _.isArray(input) ? gg.wf.Inputs.mapLeaves(input, f, path) : f(input, _.clone(path));
+          path.pop();
+          return res;
+        });
+      } else {
+        return f(inputs, path);
+      }
+    };
+
+    Inputs.flatten = function(inputs, md, arr, path) {
+      if (md == null) {
+        md = [];
+      }
+      if (arr == null) {
+        arr = [];
+      }
+      if (path == null) {
+        path = [];
+      }
+      _.each(inputs, function(input, idx) {
+        path.push(idx);
+        if (_.isArray(input)) {
+          gg.wf.Inputs.flatten(input, md, arr, path);
+        } else {
+          md[arr.length] = _.clone(path);
+          arr.push(input);
+        }
+        return path.pop();
+      });
+      return [arr, md];
+    };
+
+    Inputs.unflatten = function(arr, md) {
+      var output, setAtPath;
+      output = [];
+      setAtPath = function(o, path, data) {
+        var idx;
+        idx = _.first(path);
+        path = _.rest(path);
+        if (path.length === 0) {
+          return o[idx] = data;
+        } else {
+          if (!(o.length > idx)) {
+            o[idx] = [];
+          }
+          return setAtPath(o[idx], path, data);
         }
       };
-      return this.params.put('compute', compute);
+      _.each(arr, function(data, idx) {
+        var path;
+        path = md[idx];
+        return setAtPath(output, path, data);
+      });
+      return output;
     };
 
-    SyncBlock.prototype.compute = function(pairtable, params, cb) {
-      return pairtable;
-    };
+    return Inputs;
 
-    return SyncBlock;
+  })();
 
-  })(gg.wf.Block);
+  gg.wf.Data = (function() {
 
-  gg.wf.Stdout = (function(_super) {
+    Data.ggpackage = "gg.wf.Data";
 
-    __extends(Stdout, _super);
-
-    Stdout.ggpackage = "gg.wf.Stdout";
-
-    Stdout.type = "stdout";
-
-    function Stdout(spec) {
-      this.spec = spec;
-      Stdout.__super__.constructor.apply(this, arguments);
-      this.log = gg.util.Log.logger(this.constructor.ggpackage, "StdOut: " + this.name + "-" + this.id);
+    function Data(table, env) {
+      this.table = table;
+      this.env = env != null ? env : null;
+      if (this.env == null) {
+        this.env = new gg.wf.Env;
+      }
     }
 
-    Stdout.prototype.parseSpec = function() {
-      Stdout.__super__.parseSpec.apply(this, arguments);
-      return this.params.ensureAll({
-        key: [[], _.flatten([gg.facet.base.Facets.facetKeys, 'layer'])],
-        n: [[], null],
-        cols: [['aess'], null]
-      });
+    Data.prototype.clone = function() {
+      return new gg.wf.Data(this.table.clone(), this.env.clone());
     };
 
-    Stdout.prototype.compute = function(pairtable, params) {
-      var mdcols;
-      mdcols = ['layer', 'facet-x', 'facet-y', 'group', 'lc'];
-      gg.wf.Stdout.print(pairtable.getTable(), params.get('cols'), params.get('n'), this.log);
-      gg.wf.Stdout.print(pairtable.getMD(), mdcols, params.get('n'), this.log);
-      return pairtable;
+    Data.prototype.toJSON = function() {
+      var tableJson;
+      tableJson = null;
+      if (this.table != null) {
+        tableJson = this.table.toJSON();
+      }
+      return {
+        table: tableJson,
+        env: this.env.toJSON()
+      };
     };
 
-    Stdout.print = function(table, cols, n, log) {
-      var blockSize, idx, pairs, row, schema, _results;
-      if (log == null) {
-        log = null;
+    Data.fromJSON = function(json) {
+      var table;
+      table = null;
+      if (json.table != null) {
+        table = gg.data.RowTable.fromJSON(json.table);
       }
-      if (_.isArray(table)) {
-        _.each(table, function(t) {
-          return gg.wf.Stdout.print(t, cols, n, log);
-        });
-      }
-      idx = 0;
-      n = n != null ? n : table.nrows();
-      blockSize = Math.max(Math.floor(table.nrows() / n), 1);
-      schema = table.schema;
-      if (cols == null) {
-        cols = schema.cols;
-      }
-      if (log == null) {
-        log = gg.util.Log.logger(gg.wf.Stdout.ggpackage, "stdout");
-      }
-      log("# rows: " + (table.nrows()));
-      log("Schema: " + (schema.toString()));
-      _results = [];
-      while (idx < table.nrows()) {
-        row = table.get(idx);
-        pairs = _.map(cols, function(col) {
-          return [col, row.get(col)];
-        });
-        log(JSON.stringify(pairs));
-        _results.push(idx += blockSize);
-      }
-      return _results;
+      return new gg.wf.Data(table, gg.wf.Env.fromJSON(json.env));
     };
 
-    Stdout.printTables = function() {
-      var args;
-      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-      return this.print.apply(this, args);
-    };
+    return Data;
 
-    return Stdout;
+  })();
 
-  })(gg.wf.SyncBlock);
+  gg.wf.Env = (function(_super) {
 
-  gg.wf.Scales = (function(_super) {
+    __extends(Env, _super);
 
-    __extends(Scales, _super);
-
-    Scales.ggpackage = "gg.wf.Scales";
-
-    Scales.type = "scaleout";
-
-    Scales.log = gg.util.Log.logger(Scales.ggpackage, "scalesout");
-
-    function Scales(spec) {
-      this.spec = spec;
-      Scales.__super__.constructor.apply(this, arguments);
-      this.log = gg.util.Log.logger(this.constructor.ggpackage, "Scales: " + this.name + "-" + this.id);
+    function Env() {
+      return Env.__super__.constructor.apply(this, arguments);
     }
 
-    Scales.prototype.parseSpec = function() {
-      Scales.__super__.parseSpec.apply(this, arguments);
-      return this.params.ensureAll({
-        key: [[], _.flatten([gg.facet.base.Facets.facetKeys, 'layer'])]
-      });
-    };
+    Env.ggpackage = "gg.wf.Env";
 
-    Scales.prototype.compute = function(pairtable, params) {
-      var md,
+    Env.prototype.clone = function() {
+      var clone, removedEls,
         _this = this;
-      md = pairtable.getMD();
-      md.fastEach(function(row) {
-        var layer, scale;
-        layer = row.get('layer');
-        scale = row.get('scales');
-        return gg.wf.Scales.print(scale, layer, _this.log);
-      });
-      return pairtable;
-    };
-
-    Scales.print = function(scaleset, layerIdx, log) {
-      if (log == null) {
-        log = null;
-      }
-      if (log == null) {
-        log = this.log;
-      }
-      log("scaleset " + scaleset.id + ", " + scaleset.scales);
-      return _.each(scaleset.scales, function(map, aes) {
-        return _.each(map, function(scale, type) {
-          return log("" + scaleset.id + " l(" + layerIdx + ") t(" + type + ")\t" + (scale.toString()));
-        });
-      });
-    };
-
-    return Scales;
-
-  })(gg.wf.SyncBlock);
-
-  gg.wf.Cache = (function(_super) {
-
-    __extends(Cache, _super);
-
-    function Cache() {
-      return Cache.__super__.constructor.apply(this, arguments);
-    }
-
-    Cache.ggpackage = "gg.wf.Cache";
-
-    Cache.prototype.parseSpec = function() {
-      Cache.__super__.parseSpec.apply(this, arguments);
-      if (!this.params.has("guid")) {
-        throw Error("cacher requires a guid!");
-      }
-    };
-
-    Cache.getDB = function() {
-      if (typeof window === "undefined" || window === null) {
-        return null;
-      }
-      if (window.localStorage == null) {
-        return null;
-      }
-      return window.localStorage;
-    };
-
-    Cache.prototype.run = function() {
-      var db, guid, idx, pairtable, _i, _j, _len, _len1, _ref, _ref1, _results;
-      if (!this.ready()) {
-        throw Error("node not ready");
-      }
-      guid = this.params.get('guid');
-      db = gg.wf.Cache.getDB();
-      if (db == null) {
-        throw Error("Cache cannot run without a DB");
-      }
-      try {
-        this.trySave(guid);
-      } catch (err) {
-        this.log.warn("error storing. try clear db and save again: " + err.message);
-        try {
-          db.clear();
-          this.trySave(guid);
-          this.log.warn("success!");
-        } catch (err) {
-          this.log.warn("save failed second time. aborting " + err.message);
-          _ref = this.inputs;
-          for (idx = _i = 0, _len = _ref.length; _i < _len; idx = ++_i) {
-            pairtable = _ref[idx];
-            delete db["" + guid + "-" + idx + "-table"];
-            delete db["" + guid + "-" + idx + "-md"];
-          }
-          delete db[guid];
-          this.log.warn("done aborting");
+      removedEls = {
+        svg: _.clone(this.rm('svg'))
+      };
+      _.each(_.keys(this.data), function(key) {
+        if (_.isFunction(_this.data[key])) {
+          return removedEls[key] = _this.rm(key);
         }
-      }
-      _ref1 = this.inputs;
-      _results = [];
-      for (idx = _j = 0, _len1 = _ref1.length; _j < _len1; idx = ++_j) {
-        pairtable = _ref1[idx];
-        _results.push(this.output(idx, pairtable));
-      }
-      return _results;
+      });
+      clone = gg.wf.Env.fromJSON(this.toJSON());
+      this.merge(removedEls);
+      clone.merge(removedEls);
+      return clone;
     };
 
-    Cache.prototype.trySave = function(guid) {
-      var db, idx, key, md, mdstr, pairtable, t, tstr, _i, _len, _ref, _ref1, _results;
-      db = gg.wf.Cache.getDB();
-      db[guid] = this.inputs.length;
-      _ref = this.inputs;
-      _results = [];
-      for (idx = _i = 0, _len = _ref.length; _i < _len; idx = ++_i) {
-        pairtable = _ref[idx];
-        key = "" + guid + "-" + idx;
-        _ref1 = [pairtable.getTable(), pairtable.getMD()], t = _ref1[0], md = _ref1[1];
-        tstr = t.serialize();
-        md = md.clone();
-        if (md.has('svg')) {
-          md.rmColumn('svg');
-        }
-        mdstr = md.serialize();
-        db["" + key + "-table"] = tstr;
-        _results.push(db["" + key + "-md"] = mdstr);
-      }
-      return _results;
+    Env.fromJSON = function(json) {
+      var data;
+      data = _.fromJSON(json);
+      return new gg.wf.Env(data);
     };
 
-    return Cache;
+    return Env;
 
-  })(gg.wf.Node);
+  })(gg.util.Params);
 
   events = require('events');
 
@@ -17433,7 +15927,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
       this.log = gg.util.Log.logger(this.constructor.ggpackage, "flow");
       this.portGraph = null;
-      this.debug = {};
     }
 
     Flow.prototype.instantiate = function() {
@@ -17597,15 +16090,12 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return root;
     };
 
-    Flow.prototype.toDot = function(rankdir) {
+    Flow.prototype.toDot = function() {
       var text,
         _this = this;
-      if (rankdir == null) {
-        rankdir = 'TD';
-      }
       text = [];
       text.push("digraph G {");
-      text.push("graph [rankdir=" + rankdir + "]");
+      text.push("graph [rankdir=LR]");
       _.each(this.graph.edges(), function(edge) {
         var color, n1, n2, type, weight;
         n1 = edge[0], n2 = edge[1], type = edge[2], weight = edge[3];
@@ -17625,13 +16115,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       var bc, bcs, bmd, bp, bps, c, cs, md, p, ps;
       ps = this.parents(node);
       cs = this.children(node);
-      if (this.parents(node).length > 1) {
-        this.log.err(this.parents(node));
-        throw Error("don't support removing multi-parent node " + node.name);
-      }
-      if (this.children(node).length > 1) {
-        this.log.err(this.children(node));
-        throw Error("don't support removing multi-child node " + node.name);
+      if (this.parents(node).length > 1 || this.children(node).length > 1) {
+        throw Error("don't support removing multi-parent/child node");
       }
       c = p = null;
       if (ps.length > 0) {
@@ -17653,11 +16138,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         } else {
           bps = this.bridgedParents(node);
           bcs = this.bridgedChildren(node);
-          if (bps.length > 1) {
-            throw Error("" + node.name + ".bridgeparents  " + bps.length + " > 1");
-          }
-          if (bcs.length > 1) {
-            throw Error("" + node.name + ".bridgechildren " + bcs.length + " > 1");
+          if (bps.length > 1 || bcs.length > 1) {
+            throw Error();
           }
           bmd = bp = bc = null;
           if (bps.length > 0) {
@@ -17679,73 +16161,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       }
     };
 
-    Flow.prototype.insertAfter = function(node, parent, checkChildren) {
-      var b2str, child, _i, _len, _ref;
-      if (checkChildren == null) {
-        checkChildren = true;
-      }
-      if (this.children(parent).length > 0 && checkChildren) {
-        _ref = this.children(parent);
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          child = _ref[_i];
-          if (child != null) {
-            this.log("insertAfter calling insert: " + node.name + ", " + parent.name + ", " + child.name);
-            this.insert(node, parent, child);
-          }
-        }
-        return;
-      }
-      if (node.isBarrier() === parent.isBarrier()) {
-        this.connect(parent, node, 'normal');
-        if (!node.isBarrier()) {
-          return this.connect(parent, node, 'bridge');
-        }
-      } else {
-        b2str = function(b) {
-          if (b) {
-            return "barrier";
-          } else {
-            return "nonbarrier";
-          }
-        };
-        throw Error("Can't insert " + (b2str(node.isBarrier())) + "                    after " + (b2str(parent.isBarrier())));
-      }
-    };
-
-    Flow.prototype.insertBefore = function(node, child, checkParents) {
-      var b2str, p, _i, _len, _ref;
-      if (checkParents == null) {
-        checkParents = true;
-      }
-      if (this.parents(child).length > 0 && checkParents) {
-        this.log("insertBefore " + child.name + " has parents");
-        _ref = this.parents(child);
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          p = _ref[_i];
-          if (p != null) {
-            this.log("insertBefore calling insert: " + node.name + ", " + p.name + ", " + child.name);
-            this.insert(node, p, child);
-          }
-        }
-        return;
-      }
-      if (node.isBarrier() === child.isBarrier()) {
-        this.connect(node, child, 'normal');
-        if (!node.isBarrier()) {
-          return this.connect(node, child, 'bridge');
-        }
-      } else {
-        b2str = function(b) {
-          if (b) {
-            return "barrier";
-          } else {
-            return "nonbarrier";
-          }
-        };
-        throw Error("Can't insert " + (b2str(node.isBarrier())) + "                    before " + (b2str(child.isBarrier())));
-      }
-    };
-
     Flow.prototype.insert = function(node, parent, child) {
       var bc, bp, md, totalWeight, _i, _j, _k, _l, _len, _len1, _len2, _len3, _ref, _ref1, _ref2, _ref3,
         _this = this;
@@ -17753,14 +16168,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         return pc.id === child.id;
       }))) {
         throw Error("parent not parent of child: " + (parent.toString()) + "\t" + (child.toString()));
-      }
-      if ((parent != null) && !(child != null)) {
-        this.insertAfter(node, parent, false);
-        return;
-      }
-      if ((child != null) && !(parent != null)) {
-        this.insertBefore(node, child, false);
-        return;
       }
       if (parent.isBarrier() && child.isBarrier()) {
         if (node.isBarrier()) {
@@ -17779,7 +16186,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           _ref = this.children(parent);
           for (_i = 0, _len = _ref.length; _i < _len; _i++) {
             bc = _ref[_i];
-            md = this.disconnect(parent, bc, "normal");
+            md = this.disconnect(parent, node, "normal");
             this.connect(node, bc, "normal", md);
           }
           this.connect(parent, node, "normal", totalWeight);
@@ -17817,7 +16224,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
             md = this.disconnect(parent, bc, "bridge");
             this.connect(node, bc, "bridge", md);
           }
-          this.connect(parent, node, "bridge", md);
         }
       }
       if (!parent.isBarrier() && !child.isBarrier()) {
@@ -17832,27 +16238,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           return this.connect(node, child, "bridge", md);
         }
       }
-    };
-
-    Flow.prototype.findByClass = function(klass) {
-      return this.find(function(n) {
-        return _.isType(n, klass);
-      });
-    };
-
-    Flow.prototype.findOne = function(f) {
-      return this.find(f)[0];
-    };
-
-    Flow.prototype.find = function(f) {
-      var ret;
-      ret = [];
-      this.graph.dfs(function(node) {
-        if (f(node)) {
-          return ret.push(node);
-        }
-      });
-      return ret;
     };
 
     Flow.prototype.nodeFromId = function(id) {
@@ -17892,16 +16277,16 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         }
       }
       this.graph.connect(from, to, type, weight);
-      this.log("connected " + from.name + " -> " + to.name + " type " + type + " w " + weight);
+      this.log("connected " + from.name + " -> " + to.name + " type " + type);
       return this;
     };
 
     Flow.prototype.connectBridge = function(from, to) {
-      if (from.isBarrier()) {
-        throw Error("connectBridge: from " + from.name + " is barrier");
+      if (from.type === 'barrier') {
+        throw Error();
       }
-      if (to.isBarrier()) {
-        throw Error("connectBridge: to " + to.name + " is barrier");
+      if (from.type === 'barrier') {
+        throw Error();
       }
       this.connect(from, to, "bridge");
       return this;
@@ -17911,7 +16296,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (type == null) {
         type = "normal";
       }
-      this.log("disconnected " + from.name + " -> " + to.name + " type " + type + "  w " + (this.graph.metadata(from, to, type)));
       return this.graph.disconnect(from, to, type);
     };
 
@@ -17936,21 +16320,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Flow.prototype.bridgedParents = function(node) {
       return this.graph.parents(node, "bridge");
-    };
-
-    Flow.prototype.isAncestor = function(anc, desc) {
-      var f, found;
-      if (anc === desc) {
-        return false;
-      }
-      found = false;
-      f = function(n) {
-        if (n === desc) {
-          return found = true;
-        }
-      };
-      this.graph.dfs(f, anc);
-      return found;
     };
 
     Flow.prototype.inputPorts = function(parent, node) {
@@ -18065,7 +16434,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Flow.prototype.extend = function(nodes) {
       var _this = this;
-      return _.each(_.compact(nodes), function(node) {
+      return _.each(nodes, function(node) {
         return _this.setChild(null, node);
       });
     };
@@ -18079,9 +16448,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         node = specOrNode;
       } else if (_.isFunction(specOrNode)) {
         node = new klass({
-          params: {
-            compute: specOrNode
-          }
+          f: specOrNode
         });
       } else {
         node = new klass(specOrNode);
@@ -18132,9 +16499,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       rpc.on("runflow", function(nodeid, outport, outputs) {
         var node;
         node = _this.nodeFromId(nodeid);
-        if (node != null) {
-          _this.log.warn("runflow result: " + [node.name, nodeid, outport, node.location]);
-        }
+        _this.log.warn("runflow result: " + [node.name, nodeid, outport, node.location]);
         _this.log(outputs);
         return runner.ch.routeNodeResult(nodeid, outport, outputs);
       });
@@ -18176,11 +16541,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       runner.on("output", function(nodeid, outport, data) {
         return _this.emit("output", outport, data);
       });
-      runner.on("done", function(debug) {
-        _this.debug = debug;
-        return _this.emit("done", debug);
+      runner.on("done", function() {
+        return _this.emit("done", true);
       });
-      this.log("created runner");
       uri = graphicOpts.serverURI;
       onConnect = function() {
         _this.log.warn("connected to server at " + uri);
@@ -18190,7 +16553,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         _this.log.warn("error connecting to server at " + uri);
         return runner.run();
       };
-      this.log("checking rpc connection");
       return gg.wf.RPC.checkConnection(uri, onConnect, onErr);
     };
 
@@ -18211,7 +16573,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.yaxis = _.findGood([this.spec.yaxis, this.spec.y, "yaxis"]);
       this.minimal = _.findGood([this.spec.minimal, false]);
       this.optimize = _.findGood([this.spec.optimize, true]);
-      this.guid = _.findGood([this.spec.guid, this.spec.name, null]);
       this.serverURI = _.findGood([this.spec.server, this.spec.uri, "http://localhost:8001"]);
     }
 
@@ -18227,21 +16588,27 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     __extends(Coordinate, _super);
 
-    function Coordinate() {
-      return Coordinate.__super__.constructor.apply(this, arguments);
-    }
-
     Coordinate.ggpackage = "gg.coord.Coordinate";
 
     Coordinate.log = gg.util.Log.logger(Coordinate.ggpackage);
 
-    Coordinate.prototype.compute = function(pairtable, params) {
-      throw Error("" + this.name + ".compute() not implemented");
+    function Coordinate(spec) {
+      this.spec = spec != null ? spec : {};
+      Coordinate.__super__.constructor.apply(this, arguments);
+      this.parseSpec();
+    }
+
+    Coordinate.prototype.compute = function(data, params) {
+      return this.map(data, params);
+    };
+
+    Coordinate.prototype.map = function(data, params) {
+      throw Error("" + this.name + ".map() not implemented");
     };
 
     Coordinate.klasses = function() {
       var klasses, ret;
-      klasses = [gg.coord.Identity, gg.coord.YFlip, gg.coord.XFlip, gg.coord.Flip, gg.coord.Swap];
+      klasses = [gg.coord.Identity, gg.coord.YFlip, gg.coord.XFlip, gg.coord.Flip];
       ret = {};
       _.each(klasses, function(klass) {
         if (_.isArray(klass.aliases)) {
@@ -18286,7 +16653,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     YFlip.aliases = ["yflip"];
 
-    YFlip.prototype.compute = function(data) {
+    YFlip.prototype.map = function(data) {
       this.log("map: noop");
       return data;
     };
@@ -18307,16 +16674,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     XFlip.aliases = ["xflip"];
 
-    XFlip.prototype.compute = function(data, params) {
-      var inverted, scales, table, xRange, xScale, xtype, yRange, yScale, ytype;
-      table = data.getTable();
+    XFlip.prototype.map = function(data, params) {
+      var env, inverted, scales, table, xRange, xScale, xtype, yRange, yScale, ytype;
+      table = data.table;
+      env = data.env;
       scales = this.scales(data, params);
       inverted = scales.invert(table, gg.scale.Scale.xys);
       xtype = ytype = gg.data.Schema.unknown;
-      if (table.has('x')) {
+      if (table.contains('x')) {
         xtype = table.schema.type('x');
       }
-      if (table.has('y')) {
+      if (table.contains('y')) {
         ytype = table.schema.type('y');
       }
       xScale = scales.scale('x', xtype);
@@ -18329,20 +16697,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       yScale.range(yRange);
       this.log("map: xrange: " + xRange + "\tyrange: " + yRange);
       table = scales.apply(inverted, gg.scale.Scale.xys);
-      if (table.has('x0') && table.has('x1')) {
-        table = gg.data.Transform.transform(table, [
-          [
-            'x0', (function(row) {
-              return Math.min(row.get('x0'), row.get('x1'));
-            }), gg.data.Schema.numeric
-          ], [
-            'x1', (function(row) {
-              return Math.max(row.get('x0'), row.get('x1'));
-            }), gg.data.Schema.numeric
-          ]
-        ]);
+      if (table.contains('x0') && table.contains('x1')) {
+        table.each(function(row) {
+          var x0, x1;
+          x0 = row.get('x0');
+          x1 = row.get('x1');
+          row.set('x0', Math.min(x0, x1));
+          return row.set('x1', Math.max(x0, x1));
+        });
       }
-      return new gg.data.PairTable(table, data.getMD());
+      data.table = table;
+      return data;
     };
 
     return XFlip;
@@ -18361,10 +16726,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Flip.aliases = ["flip", 'xyflip'];
 
-    Flip.prototype.compute = function(data, params) {
-      var inverted, md, scales, table, type, xRange, xscale;
-      table = data.getTable();
-      md = data.getMD();
+    Flip.prototype.map = function(data, params) {
+      var env, inverted, scales, table, type, xRange, xscale;
+      table = data.table;
+      env = data.env;
       scales = this.scales(data, params);
       inverted = scales.invert(table, gg.scale.Scale.xs);
       type = table.schema.type('x');
@@ -18373,20 +16738,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       xscale.range([xRange[1], xRange[0]]);
       this.log("map: xrange: " + xRange);
       table = scales.apply(inverted, gg.scale.Scale.xs);
-      if (table.has('x0') && table.has('x1')) {
-        table = gg.data.Transform.transform(table, [
-          [
-            'x0', (function(row) {
-              return Math.min(row.get('x0'), row.get('x1'));
-            }), gg.data.Schema.numeric
-          ], [
-            'x1', (function(row) {
-              return Math.max(row.get('x0'), row.get('x1'));
-            }), gg.data.Schema.numeric
-          ]
-        ]);
+      if (table.contains('x0') && table.contains('x1')) {
+        table.each(function(row) {
+          var x0, x1;
+          x0 = row.get('x0');
+          x1 = row.get('x1');
+          row.set('x0', Math.min(x0, x1));
+          return row.set('x1', Math.max(x0, x1));
+        });
       }
-      return new gg.data.PairTable(table, md);
+      data.table = table;
+      return data;
     };
 
     return Flip;
@@ -18405,15 +16767,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Identity.aliases = ["identity"];
 
-    Identity.prototype.compute = function(pt, params) {
-      var mapping, md, origscale, scales, schema, table, transform, yRange, yaess, yscale, ytype;
-      table = pt.getTable();
-      md = pt.getMD();
+    Identity.prototype.map = function(data, params) {
+      var env, origscale, scales, schema, table, transform, yRange, yaess, yscale, ytype, _ref;
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
       schema = table.schema;
-      scales = md.get(0, 'scales');
+      scales = this.scales(data, params);
       ytype = gg.data.Schema.unknown;
-      if (schema.has('y')) {
-        ytype = schema.type('y');
+      if (table.contains('y')) {
+        ytype = table.schema.type('y');
       }
       yscale = scales.get('y', ytype);
       origscale = yscale.clone();
@@ -18427,90 +16788,31 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.log(yscale.toString());
       this.log("test transform: 500 -> " + (origscale.invert(500)) + " -> " + (transform(500)));
       yaess = _.filter(gg.scale.Scale.ys, function(aes) {
-        return schema.has(aes);
+        return table.contains(aes);
       });
-      mapping = _.map(yaess, function(col) {
-        return [col, transform, gg.data.Schema.numeric];
+      table.each(function(row) {
+        return _.each(yaess, function(aes) {
+          var vals;
+          vals = row.get(aes);
+          if (_.isArray(vals)) {
+            return row.set(aes, _.map(vals, transform));
+          } else {
+            return row.set(aes, transform(vals));
+          }
+        });
       });
-      table = gg.data.Transform.mapCols(pt.getTable(), mapping);
-      return new gg.data.PairTable(table, md);
+      gg.wf.Stdout.print(table, ['x', 'y'], 5, this.log);
+      data.table = table;
+      return data;
     };
 
     return Identity;
 
   })(gg.coord.Coordinate);
 
-  gg.coord.Swap = (function(_super) {
-
-    __extends(Swap, _super);
-
-    function Swap() {
-      return Swap.__super__.constructor.apply(this, arguments);
-    }
-
-    Swap.ggpackage = "gg.coord.Swap";
-
-    Swap.aliases = ["swap"];
-
-    Swap.prototype.compute = function(data, params) {
-      var colData, inverted, newcol, scales, table, x, xRange, xScale, xcols, xtype, y, yRange, yScale, ycols, ytype;
-      table = data.getTable();
-      scales = this.scales(data, params);
-      xtype = ytype = gg.data.Schema.unknown;
-      if (table.has('x')) {
-        xtype = table.schema.type('x');
-      }
-      if (table.has('y')) {
-        ytype = table.schema.type('y');
-      }
-      xScale = scales.scale('x', xtype);
-      xRange = xScale.range();
-      yScale = scales.scale('y', ytype);
-      yRange = yScale.range();
-      inverted = scales.invert(table, gg.scale.Scale.xys);
-      xcols = _.o2map(gg.scale.Scale.xs, function(x) {
-        if (inverted.has(x)) {
-          return [x, inverted.getColumn(x)];
-        }
-      });
-      ycols = _.o2map(gg.scale.Scale.ys, function(y) {
-        if (inverted.has(y)) {
-          return [y, inverted.getColumn(y)];
-        }
-      });
-      for (x in xcols) {
-        colData = xcols[x];
-        if (x.search('^x') >= 0) {
-          newcol = "y" + (x.substr(1));
-          inverted = inverted.addColumn(newcol, colData, xtype, true);
-        }
-      }
-      for (y in ycols) {
-        colData = ycols[y];
-        if (y.search('^y') >= 0) {
-          newcol = "x" + (y.substr(1));
-          inverted = inverted.addColumn(newcol, colData, ytype, true);
-        }
-      }
-      xScale.range([yRange[1], yRange[0]]);
-      yScale.range(xRange);
-      xScale.aes = 'y';
-      yScale.aes = 'x';
-      scales.set(xScale);
-      scales.set(yScale);
-      table = scales.apply(inverted, gg.scale.Scale.xys);
-      return new gg.data.PairTable(table, data.getMD());
-    };
-
-    return Swap;
-
-  })(gg.coord.Coordinate);
-
   gg.core.Aes = (function() {
 
     function Aes() {}
-
-    Aes.groupcols = ['fill', 'stroke', 'stroke-width', 'stroke-opacity', 'group', 'opacity', 'r', 'radius'];
 
     Aes.aliases = {
       color: ['fill', 'stroke'],
@@ -18526,12 +16828,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       } else {
         return [aes];
       }
-    };
-
-    Aes.groupable = function(aes) {
-      return _.any(this.resolve(aes), function(col) {
-        return __indexOf.call(gg.core.Aes.groupcols, col) >= 0;
-      });
     };
 
     return Aes;
@@ -18572,6 +16868,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Data.loadSpec = function(spec) {
+      var type, val;
       if (spec == null) {
         return {};
       }
@@ -18598,48 +16895,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       } else if (!_.isObject(spec)) {
         spec = {};
       }
+      type = spec.type;
+      val = spec.val;
       spec.name = spec.name || "";
       return spec;
-    };
-
-    Data.spec2Node = function(spec) {
-      var node;
-      node = (function() {
-        switch (spec.type) {
-          case "table":
-            return new gg.wf.TableSource({
-              params: {
-                table: spec.val
-              }
-            });
-          case "rows":
-            return new gg.wf.RowSource({
-              params: {
-                rows: spec.val
-              }
-            });
-          case "csv":
-            return new gg.wf.CsvSource({
-              params: {
-                url: spec.val
-              }
-            });
-          case "jdbc":
-          case "sql":
-          case "query":
-          case "db":
-          case "database":
-          case "postgres":
-            return new gg.wf.SQLSource({
-              params: spec
-            });
-          case "function":
-            return null;
-          default:
-            return null;
-        }
-      })();
-      return node;
     };
 
     Data.isCsvString = function(o) {
@@ -18680,7 +16939,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Data.prototype.data = function(layerIdx) {
-      var spec;
+      var node, spec;
       spec = layerIdx != null ? this.layerDefaults[layerIdx] || this.defaults : this.defaults;
       this.log(spec);
       if (spec == null) {
@@ -18689,50 +16948,60 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       }
       if (spec.type == null) {
         this.log.warn("spec.type not defined");
-        this.log.warn(spec);
         return null;
       }
-      return this.constructor.spec2Node(spec);
+      node = (function() {
+        switch (spec.type) {
+          case "table":
+            return new gg.wf.TableSource({
+              params: {
+                table: spec.val
+              }
+            });
+          case "rows":
+            return new gg.wf.RowSource({
+              params: {
+                rows: spec.val
+              }
+            });
+          case "csv":
+            return new gg.wf.CsvSource({
+              params: {
+                url: spec.val
+              }
+            });
+          case "jdbc":
+          case "sql":
+          case "query":
+          case "db":
+          case "database":
+          case "postgres":
+            return new gg.wf.SQLSource({
+              params: spec
+            });
+          case "function":
+            return null;
+          default:
+            return null;
+        }
+      })();
+      return node;
     };
 
     return Data;
 
   })();
 
-  try {
-    events = require('events');
-  } catch (error) {
-    console.log(error);
-  }
-
-  gg.core.Graphic = (function(_super) {
-
-    __extends(Graphic, _super);
-
-    Graphic.ggpackage = "gg.core.Graphic";
+  gg.core.Graphic = (function() {
 
     Graphic.envKeys = ['layer', 'scales', 'scalesconfig', 'lc'];
 
     function Graphic(spec) {
-      if (spec == null) {
-        spec = null;
-      }
-      this.spec(spec);
-    }
-
-    Graphic.prototype.spec = function(spec) {
       var _this = this;
-      if (spec == null) {
-        spec = null;
-      }
-      if (spec == null) {
-        return this.spec;
-      }
-      this.spec = spec;
+      this.spec = spec != null ? spec : {};
       this.debugspec = this.spec.debug || {
         "": gg.util.Log.WARN
       };
-      gg.util.Log.loggers = {};
       gg.util.Log.setDefaults(this.debugspec);
       this.aesspec = _.findGoodAttr(this.spec, ["aes", "aesthetic", "mapping"], {});
       this.layerspec = this.spec.layers || [];
@@ -18744,10 +17013,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.layers = new gg.layer.Layers(this, this.layerspec);
       this.scales = new gg.scale.Scales(this, this.scalespec);
       this.datas = gg.core.Data.fromSpec(this.spec.data);
-      this.map = gg.xform.Mapper.fromSpec({
-        name: "base-aes-map",
-        aes: this.aesspec
-      });
       _.each(this.layers.layers, function(layer) {
         _this.scales.scalesConfig.addLayerDefaults(layer);
         return _this.datas.addLayerDefaults(layer);
@@ -18757,18 +17022,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         container: new gg.core.Bound(0, 0, this.options.w, this.options.h),
         options: this.options
       });
-      this.eventCoordinator = new events.EventEmitter;
-      return this.log = gg.util.Log.logger(this.constructor.ggpackage, "core");
-    };
-
-    Graphic.prototype.pstore = function() {
-      if (this.workflow != null) {
-        return gg.prov.PStore.get(this.workflow);
-      } else {
-        this.log.warn("plot has not been compiled.  no prov store found");
-        return null;
-      }
-    };
+    }
 
     Graphic.prototype.compile = function() {
       var multicast, node, preMulticastNodes, prev, wf, _i, _len;
@@ -18785,8 +17039,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       preMulticastNodes = [];
       preMulticastNodes.push(this.datas.data());
       preMulticastNodes.push(this.setupEnvNode());
-      preMulticastNodes.push(this.map);
-      preMulticastNodes = _.compact(preMulticastNodes);
+      preMulticastNodes = preMulticastNodes.concat(this.facets.splitter);
       prev = null;
       for (_i = 0, _len = preMulticastNodes.length; _i < _len; _i++) {
         node = preMulticastNodes[_i];
@@ -18817,7 +17070,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         _results = [];
         for (_k = 0, _len2 = nodes.length; _k < _len2; _k++) {
           node = nodes[_k];
-          if (!node.isBarrier()) {
+          if (node.type !== 'barrier') {
             wf.connectBridge(prev, node);
             _results.push(prev = node);
           } else {
@@ -18838,7 +17091,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
             svg: {
               base: this.svg
             },
-            event: this.eventCoordinator,
             options: this.options
           },
           location: 'client'
@@ -18867,41 +17119,26 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Graphic.prototype.render = function(svg, input) {
-      var dataNode, optimizer,
-        _this = this;
+      var dataNode, optimizer;
       this.svg = svg;
-      this.log("running graphic.render");
-      this.log(input);
       $(this.svg[0]).empty();
       this.svg = this.svg.append('svg');
       this.compile();
       if (input) {
-        this.log("prepending data node");
         this.datas.setDefault(input);
         dataNode = this.datas.data();
         this.workflow.prepend(dataNode);
       }
       if (this.options.optimize) {
-        optimizer = new gg.wf.Optimizer([new gg.wf.rule.RPCify, new gg.wf.rule.RmDebug, new gg.wf.rule.MergeBarrier]);
-        if (this.options.guid != null) {
-          optimizer.rules.push(new gg.wf.rule.Cache({
-            params: {
-              guid: this.options.guid
-            }
-          }));
-        }
+        optimizer = new gg.wf.Optimizer([new gg.wf.rule.RPCify]);
         this.workflow = optimizer.run(this.workflow);
       }
-      this.log("running workflow");
-      this.workflow.on("done", function(debug) {
-        return _this.emit("done", debug);
-      });
       return this.workflow.run(this.options);
     };
 
     return Graphic;
 
-  })(events.EventEmitter);
+  })();
 
   gg.core.Layout = (function(_super) {
 
@@ -18913,8 +17150,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Layout.ggpackage = "gg.core.Layout";
 
-    Layout.prototype.compute = function(tset, params) {
-      var c, facetC, fh, fw, h, lc, md, options, textSize, title, titleC, titleH, w, _ref;
+    Layout.prototype.compute = function(datas, params) {
+      var c, envs, facetC, fh, fw, h, lc, options, tables, textSize, title, titleC, titleH, w, _ref;
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
       options = params.get('options');
       c = new gg.core.Bound(0, 0, options.w, options.h);
       _ref = [c.w(), c.h()], w = _ref[0], h = _ref[1];
@@ -18936,16 +17179,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           facetC.y0 += titleH;
         }
       }
-      md = tset.getMD();
-      lc = {};
-      if (md.has('lc')) {
-        lc = md.get(0, 'lc');
-      }
+      lc = _.first(envs).get('lc') || {};
       lc.titleC = titleC;
       lc.facetC = facetC;
       lc.baseC = c;
-      md = md.setColumn('lc', lc);
-      return new gg.data.PairTable(tset.getTable(), md);
+      _.each(envs, function(env) {
+        return env.put('lc', lc);
+      });
+      return datas;
     };
 
     return Layout;
@@ -18967,17 +17208,23 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this.params.put("location", 'client');
     };
 
-    Render.prototype.compute = function(pairtable, params) {
-      var c, facetC, facetsSvg, guideC, lc, md, options, row, svg, text, titleC, _i, _len, _ref;
-      md = pairtable.getMD();
-      row = md.get(0);
-      svg = row.get('svg').base;
-      lc = row.get('lc');
+    Render.prototype.compute = function(datas, params) {
+      var c, env, envs, facetC, facetsSvg, guideC, lc, options, svg, tables, text, titleC;
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
+      env = _.first(envs);
+      svg = env.get('svg').base;
+      lc = env.get('lc');
+      c = lc.baseC;
+      options = params.get('options');
+      lc = _.first(envs).get('lc');
       if (lc == null) {
         throw Error();
       }
-      c = lc.baseC;
-      options = params.get('options');
       svg.attr('width', c.w()).attr('height', c.h());
       _.subSvg(svg, {
         "class": 'graphic-background',
@@ -19001,129 +17248,167 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         height: facetC.h()
       });
       guideC = lc.guideC;
-      _ref = md.getColumn('svg');
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        svg = _ref[_i];
-        svg.facets = facetsSvg;
-      }
-      return new gg.data.PairTable(pairtable.getTable(), md);
+      _.each(envs, function(env) {
+        return env.get('svg').facets = facetsSvg;
+      });
+      return datas;
     };
 
     return Render;
 
   })(gg.core.BForm);
 
+  gg.core.Spec = (function() {
+
+    function Spec() {}
+
+    Spec.prototype.parseAes = function(schema, spec) {
+      var aess, group, position;
+      position = _.pick(spec, positionAess);
+      if ('group' in spec) {
+        group = spec.group;
+      } else {
+        group = {};
+        aess = _.keys(spec);
+        aess = aess.filter(function(aes) {
+          return !isPosition(aes);
+        });
+        _.each(aess, function(aes) {
+          var cols;
+          cols = schema.getColnames(aes);
+          if (!((cols != null) && cols.length > 0)) {
+            return;
+          }
+          if (scales.scale(aes).type === gg.data.Schema.ordinal) {
+            return group[aes] = spec[aes];
+          }
+        });
+        group;
+
+      }
+      return position['group'] = group;
+    };
+
+    return Spec;
+
+  })();
+
+  /*
+  
+  0-D
+  
+  Point: ( x, y, r, x0, x1, y0, y1, [all other variables…] )
+  1-D
+  
+  Line: ( (x, y)*, [grouping keys] )
+  Step: ( (x, y)*, [grouping keys] ) // renders step path
+  Path: ( (x0, x1, y0, y1)* [grouping keys] )
+  2-D
+  
+  Area -> ( (x,y)*, [grouping keys] )
+  Interval -> ( x, y, width, x0=x, x1=x+width, y0=0, y1=y, [all other variables…] )
+  Rect -> ( x, w, y, h, x0=x, x1=x+w, y0=y, y1=y+h, [all other variables…] )
+  Polygon -> ( (x,y)*, [grouping keys] )
+  difference from line/area is that the polygon is closed
+  Hex -> ( x, y, r, [all other variables] )
+  N-D
+  
+  Schema: ( x, q0, q1, q2, q3, [y]*, [all other variables…] )
+  Glyph: ( x0, x1, y0, y1, glyphname, [glyph specific variables] )
+  Glyph can be used to generate symbols
+  Network
+  
+  edge: ( v1, v2, [weight], )
+  */
+
+
   gg.core.FormUtil = (function() {
 
     function FormUtil() {}
 
-    FormUtil.validateInput = function(pt, params, log) {
-      var iSchema, missing, table;
-      table = pt.getTable();
+    FormUtil.validateInput = function(data, params, log) {
+      var env, iSchema, missing, table;
+      table = data.table;
+      env = data.env;
       if (!(table.nrows() > 0)) {
         return true;
       }
-      iSchema = params.get("inputSchema", pt, params);
+      iSchema = params.get("inputSchema", data, params);
       if (iSchema == null) {
         return;
       }
-      missing = _.reject(iSchema, function(col) {
-        return table.has(col);
+      missing = _.reject(iSchema, function(attr) {
+        return table.contains(attr);
       });
       if (missing.length > 0) {
         if (log != null) {
-          log("" + (params.get('name')) + ": input schema did not contain " + (missing.join(",")));
           log(log.logname);
           gg.wf.Stdout.print(table, null, 5, log);
         }
         throw Error("" + (params.get('name')) + ": input schema did not contain " + (missing.join(",")));
       }
-      return true;
     };
 
-    FormUtil.addDefaults = function(pt, params, log) {
-      var defaults, mapping, table;
-      table = pt.getTable();
-      defaults = params.get("defaults", pt, params);
+    FormUtil.addDefaults = function(data, params, log) {
+      var defaults, env, table,
+        _this = this;
+      table = data.table;
+      env = data.env;
+      defaults = params.get("defaults", data, params);
       if (log != null) {
-        log("table schema: " + (table.schema.toString()));
+        log("table schema: " + (table.schema.toSimpleString()));
         log("expected:     " + (JSON.stringify(defaults)));
       }
-      mapping = _.map(defaults, function(v, k) {
-        var f;
-        if (k === 'group') {
-          if (!_.isObject(v)) {
-            throw Error("group default value should be object: " + v);
+      return _.each(defaults, function(val, col) {
+        if (!table.contains(col)) {
+          if (log != null) {
+            log("adding:      " + col + " -> " + val);
           }
-          log("adding:  " + k + " -> " + v);
-          f = function(row) {
-            var newv;
-            newv = _.clone(v);
-            if (row.has('group')) {
-              _.extend(newv, row.get('group'));
-            }
-            return newv;
-          };
-          return [k, f, gg.data.Schema.object];
-        }
-        if (table.has(k)) {
-          return null;
-        } else {
-          log("adding:  " + k + " -> " + v);
-          return _.mapToFunction(table, k, v);
+          return table.addConstColumn(col, val);
         }
       });
-      mapping = _.compact(mapping);
-      table = gg.data.Transform.transform(table, mapping);
-      return new gg.data.PairTable(table, pt.getMD());
     };
 
-    FormUtil.ensureScales = function(pairtable, params, log) {
-      var f, md;
-      md = pairtable.getMD();
-      if (!(md.nrows() <= 1)) {
-        log("@scales called with multiple rows: " + (md.nrows()));
-      }
-      if (md.nrows() === 0) {
-        log("@scales called with no md rows");
-        log(pairtable.getTable());
-        throw Error("@scales called with no md rows");
-      }
-      if (!md.has('scalesconfig')) {
-        md = md.setColumn('scalesconfig', gg.scale.Config.fromSpec({}));
-      }
-      if (!md.has('scales')) {
-        f = function(row) {
-          var config, layer;
-          layer = row.get('layer');
-          config = row.get('scalesconfig');
-          return config.scales(layer);
-        };
-        md = gg.data.Transform.transform(md, [['scales', f, gg.data.Schema.object]]);
-        return new gg.data.PairTable(pairtable.getTable(), md);
-      } else {
-        return pairtable;
-      }
+    FormUtil.paneInfo = function(data) {
+      var ret;
+      ret = {
+        facetX: data.env.get(gg.facet.base.Facets.facetXKey),
+        facetY: data.env.get(gg.facet.base.Facets.facetYKey),
+        layer: data.env.get("layer")
+      };
+      return ret;
     };
 
-    FormUtil.scales = function(pairtable, params, log) {
-      var config, layer, md, scaleset;
-      md = pairtable.getMD();
-      if (!(md.nrows() <= 1)) {
-        log.warn("@scales called with multiple rows: " + (md.raw()));
-      }
-      if (md.nrows() === 0) {
-        throw Error("@scales called with no md rows");
-      }
-      if (md.has('scales')) {
-        return md.get(0, 'scales');
-      } else {
-        layer = md.get(0, 'layer');
-        config = md.get(0, 'scalesconfig');
+    FormUtil.scales = function(data) {
+      var config, env, layer, scaleset;
+      env = data.env;
+      layer = env.get("layer");
+      if (!env.contains("scales")) {
+        config = env.get("scalesconfig");
         scaleset = config.scales(layer);
-        md = md.setColumn('scales', scaleset);
-        return scaleset;
+        env.put("scales", scaleset);
       }
+      return env.get("scales");
+    };
+
+    FormUtil.multiAddDefaults = function(datas, params, log) {
+      var data, _i, _len, _results;
+      _results = [];
+      for (_i = 0, _len = datas.length; _i < _len; _i++) {
+        data = datas[_i];
+        _results.push(gg.core.FormUtil.addDefaults(data, params, log));
+      }
+      return _results;
+    };
+
+    FormUtil.multiValidateInput = function(datas, params) {
+      var data, _i, _len, _results;
+      _results = [];
+      for (_i = 0, _len = datas.length; _i < _len; _i++) {
+        data = datas[_i];
+        _results.push(gg.core.FormUtil.validateInput(data, params));
+      }
+      return _results;
     };
 
     FormUtil.scalesList = function(datas) {
@@ -19152,12 +17437,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    FormUtil.pick = function(datas, key) {
+    FormUtil.pick = function(datas, key, defaultVal) {
       var data, vals, _i, _len;
+      if (defaultVal == null) {
+        defaultVal = null;
+      }
       vals = [];
       for (_i = 0, _len = datas.length; _i < _len; _i++) {
         data = datas[_i];
-        vals.push(data.env.get(key));
+        if (data.env.contains(key)) {
+          vals.push(data.env.get(key));
+        }
       }
       vals = _.uniq(vals);
       vals.sort();
@@ -19184,15 +17474,16 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         showXAxis: [[], true],
         showYAxis: [[], true],
         paddingPane: [[], 5],
-        margin: [[], 1],
-        options: [[], {}]
+        margin: [[], 1]
       });
     };
 
-    Layout.prototype.facetVals = function(md) {
-      var Facets;
-      Facets = gg.facet.base.Facets;
-      return _.uniq(_.zip(md.getColumn('facet-x'), md.getColumn('facet-y')), false, JSON.stringify);
+    Layout.prototype.xFacetVals = function(datas) {
+      return this.pick(datas, gg.facet.base.Facets.facetXKey);
+    };
+
+    Layout.prototype.yFacetVals = function(datas) {
+      return this.pick(datas, gg.facet.base.Facets.facetYKey);
     };
 
     Layout.prototype.getTitleHeight = function(params) {
@@ -19201,73 +17492,37 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return _.exSize(css).h;
     };
 
-    Layout.prototype.getMaxYText = function(md) {
-      return this.getMaxText(md, 'y');
-    };
-
-    Layout.prototype.getMaxYText = function(md) {
-      return this.getMaxText(md, 'y');
-    };
-
-    Layout.prototype.getMaxText = function(md, aes) {
-      var formatter, scale, set, text, v, _i, _j, _len, _len1, _ref, _ref1, _text;
-      text = '100';
-      formatter = d3.format(',.0f');
-      _ref = md.getColumn('scales');
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        set = _ref[_i];
-        scale = set.scale(aes, gg.data.Schema.unknown);
-        if (scale.type === gg.data.Schema.numeric) {
-          _ref1 = scale.domain();
-          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-            v = _ref1[_j];
-            if (_.isNumber(v)) {
-              _text = formatter(v);
-            } else {
-              _text = String(v);
-            }
-            if ((_text != null) && _text.length > text.length) {
-              text = _text;
-            }
-          }
-        }
-      }
-      return text;
-    };
-
-    Layout.prototype.layoutLabels = function(md, params, lc) {
-      var Bound, container, em, h, nxs, nys, options, paddingPane, plotC, plotH, plotW, showXAxis, showXFacet, showYAxis, showYFacet, titleH, toffset, w, xAxisLabelC, xFacetLabelC, xFacetlabelC, xs, yAxisLabelC, yFacetLabelC, yFacetlabelC, yoffset, ys, _ref;
+    Layout.prototype.layoutLabels = function(datas, params, lc) {
+      var Bound, container, em, envs, h, nxs, nys, options, paddingPane, plotC, plotH, plotW, showXFacet, showYFacet, tables, titleH, toffset, w, xAxisLabelC, xFacetLabelC, xs, yAxisLabelC, yFacetLabelC, ys, _ref;
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
       options = params.get('options');
       container = lc.facetC;
       _ref = [container.w(), container.h()], w = _ref[0], h = _ref[1];
       Bound = gg.core.Bound;
-      xs = _.uniq(md.getColumn('facet-x'));
-      ys = _.uniq(md.getColumn('facet-y'));
+      xs = this.xFacetVals(datas);
+      ys = this.yFacetVals(datas);
       nxs = xs.length;
       nys = ys.length;
       showXFacet = !(xs.length === 1 && !(xs[0] != null));
       showYFacet = !(ys.length === 1 && !(ys[0] != null));
-      showXAxis = params.get('showXAxis');
-      showYAxis = params.get('showYAxis');
       paddingPane = params.get('paddingPane');
       if (!options.minimal) {
         titleH = this.getTitleHeight(params);
-        em = _.textSize("f", {
-          padding: 3
-        }).h;
-        this.log("title size: " + titleH);
-        this.log("em size: " + em);
+        em = _.textSize("m", {}).h;
+        this.log.warn("title size: " + titleH);
+        this.log.warn("em size: " + em);
         plotW = w;
-        if (showYAxis) {
-          plotW -= paddingPane + titleH;
-        }
+        plotW -= paddingPane + titleH;
         if (showYFacet) {
           plotW -= paddingPane + titleH;
         }
         plotH = h;
-        if (showXAxis) {
-          plotH -= paddingPane + titleH;
-        }
+        plotH -= paddingPane + titleH;
         if (showXFacet) {
           plotH -= paddingPane + titleH;
         }
@@ -19275,38 +17530,19 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         if (showXFacet) {
           toffset += paddingPane + titleH;
         }
-        yoffset = 0;
-        if (showYAxis) {
-          yoffset += paddingPane + titleH;
-        }
         plotC = new Bound(0, 0, plotW, plotH);
-        plotC.d(yoffset, toffset);
-        container = new gg.facet.pane.Container(plotC, 0, 0, "", "", showXFacet, showYFacet, showXAxis, showYAxis, {
-          labelHeight: em,
-          padding: 3
-        });
+        plotC.d(paddingPane + titleH, toffset);
+        container = new gg.facet.pane.Container(plotC, 0, 0, showXFacet, showYFacet, true, true, em, em, 0);
         xFacetLabelC = container.xFacetC();
         xFacetLabelC.d((w - 2 * titleH) / 2, 0);
         yFacetLabelC = container.yFacetC();
         yFacetLabelC = new Bound(yFacetLabelC.x0, plotH / 2 + (paddingPane + titleH), yFacetLabelC.x0 + yFacetLabelC.w(), (plotH / 2 + (paddingPane + titleH)) + yFacetLabelC.h());
         yFacetLabelC.d(-em / 2, 0);
         xAxisLabelC = container.xAxisC();
-        xAxisLabelC.d((w - 2 * titleH) / 2, em / 2);
+        xAxisLabelC.d((w - 2 * titleH) / 2, em);
         yAxisLabelC = container.yAxisC();
         yAxisLabelC = new Bound(yAxisLabelC.x0, plotH / 2 + (paddingPane + titleH), yAxisLabelC.x0 + yAxisLabelC.w(), (plotH / 2 + (paddingPane + titleH)) + yAxisLabelC.h());
         this.log("yAxisLabelC: " + (yAxisLabelC.toString()));
-        if (!showXFacet) {
-          xFacetlabelC = null;
-        }
-        if (!showYFacet) {
-          yFacetlabelC = null;
-        }
-        if (!showXAxis) {
-          xAxisLabelC = null;
-        }
-        if (!showYAxis) {
-          yAxisLabelC = null;
-        }
         plotC = container.drawC();
       } else {
         xFacetLabelC = null;
@@ -19320,166 +17556,24 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       lc.yFacetLabelC = yFacetLabelC;
       lc.xAxisLabelC = xAxisLabelC;
       lc.yAxisLabelC = yAxisLabelC;
-      lc.plotC = plotC;
-      this.log("background: " + (container.toString()));
-      this.log("plot area: " + (plotC.toString()));
-      return md;
+      return lc.plotC = plotC;
     };
 
-    Layout.prototype.computePaneSizes = function(grid, w, h, nxs, nys) {
-      var nonPaneH, nonPaneHs, nonPaneW, nonPaneWs, paneH, paneW;
-      nonPaneWs = _.times(nys, function() {
-        return 0;
+    Layout.prototype.compute = function(datas, params) {
+      var envs, lc, tables;
+      lc = _.first(datas).env.get('lc');
+      tables = _.map(datas, function(data) {
+        return data.table;
       });
-      nonPaneHs = _.times(nxs, function() {
-        return 0;
+      envs = _.map(datas, function(data) {
+        return data.env;
       });
-      _.each(grid, function(paneCol, xidx) {
-        return _.each(paneCol, function(pane, yidx) {
-          var dx, dy;
-          if (pane == null) {
-            return;
-          }
-          dx = pane.labelHeight * pane.bYFacet + pane.yAxisW * pane.bYAxis;
-          dy = pane.labelHeight * (pane.bXFacet + pane.bXAxis);
-          nonPaneWs[yidx] += dx;
-          return nonPaneHs[xidx] += dy;
-        });
+      this.layoutLabels(datas, params, lc);
+      this.layoutPanes(datas, params, lc);
+      _.each(envs, function(env) {
+        return env.put('lc', lc);
       });
-      nonPaneW = _.mmax(nonPaneWs);
-      nonPaneH = _.mmax(nonPaneHs);
-      paneW = (w - nonPaneW) / nxs;
-      paneH = (h - nonPaneH) / nys;
-      return [paneW, paneH];
-    };
-
-    Layout.prototype.setPaneBounds = function(grid, paneW, paneH) {
-      var _this = this;
-      this.log("creating bounds objects for each pane");
-      return _.each(grid, function(paneCol, xidx) {
-        return _.each(paneCol, function(pane, yidx) {
-          var c, dx, dy;
-          if (pane == null) {
-            return;
-          }
-          c = pane.c;
-          pane.c.x1 = paneW;
-          pane.c.y1 = paneH;
-          dx = _.sum(_.times(xidx, function(pxidx) {
-            return grid[pxidx][yidx].w();
-          }));
-          dy = _.sum(_.times(yidx, function(pyidx) {
-            return grid[xidx][pyidx].h();
-          }));
-          _this.log("pane at " + pane.xidx + "x" + pane.yidx + " has dx,dy " + dx + ", " + dy);
-          _this.log("pane(" + pane.x + "," + pane.y + ") before: " + (c.w()) + " x " + (c.h()));
-          pane.c.d(dx, dy);
-          c = pane.drawC();
-          _this.log("pane(" + pane.x + "," + pane.y + ") after: " + (c.w()) + " x " + (c.h()));
-          _this.log(pane);
-          return pane.c.d(pane.yAxisC().w(), pane.xFacetC().h());
-        });
-      });
-    };
-
-    Layout.prototype.addPanesToEnv = function(md, grid, paddingPane) {
-      var set;
-      md = gg.data.Transform.transform(md, [
-        [
-          'paneC', (function(row) {
-            var paneC, x, y;
-            x = row.get('facet-x');
-            y = row.get('facet-y');
-            paneC = grid[x][y];
-            return paneC;
-          }), gg.data.Schema.object
-        ]
-      ]);
-      md.each(function(row) {
-        var aes, drawC, paneC, scaleSet, type, x, xrange, y, yrange, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _results;
-        x = row.get('facet-x');
-        y = row.get('facet-y');
-        paneC = grid[x][y];
-        drawC = paneC.drawC();
-        xrange = [paddingPane, drawC.w() - 2 * paddingPane];
-        yrange = [paddingPane, drawC.h() - 2 * paddingPane];
-        scaleSet = gg.core.FormUtil.scales(fdata);
-        _ref = gg.scale.Scale.xs;
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          aes = _ref[_i];
-          _ref1 = scaleSet.types(aes);
-          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-            type = _ref1[_j];
-            scaleSet.scale(aes, type).range(xrange);
-          }
-        }
-        _ref2 = gg.scale.Scale.ys;
-        _results = [];
-        for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-          aes = _ref2[_k];
-          _results.push((function() {
-            var _l, _len3, _ref3, _results1;
-            _ref3 = scaleSet.types(aes);
-            _results1 = [];
-            for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
-              type = _ref3[_l];
-              _results1.push(scaleSet.scale(aes, type).range(yrange));
-            }
-            return _results1;
-          })());
-        }
-        return _results;
-      });
-      set = md.get(0, 'scales');
-      this.log("grid layout scale set");
-      return this.log(set.toString());
-    };
-
-    Layout.prototype.optimizeFontSize = function(paneC) {
-      var optXFont, optYFont, x, xText, xfc, y, yText, yfc, _ref;
-      if (paneC == null) {
-        return;
-      }
-      _ref = [paneC.x, paneC.y], x = _ref[0], y = _ref[1];
-      xText = String(x);
-      yText = String(y);
-      xfc = paneC.xFacetC();
-      yfc = paneC.yFacetC();
-      optXFont = gg.util.Textsize.fit(xText, xfc.w(), xfc.h(), 8, {
-        padding: 2
-      });
-      optYFont = gg.util.Textsize.fit(yText, yfc.h(), yfc.w(), 8, {
-        padding: 2
-      });
-      return [optXFont, optYFont];
-    };
-
-    Layout.prototype.setOptimalFacetFonts = function(pairtable, grid, xfonts, yfonts) {
-      var md, partitions;
-      md = pairtable.getMD();
-      partitions = md.partition(['facet-x', 'facet-y']);
-      return partitions = _.map(partitions, function(p, idx) {
-        var x, xfont, y, yfont;
-        x = p.get(0, 'facet-x');
-        y = p.get(0, 'facet-y');
-        xfont = xfonts[idx];
-        yfont = yfonts[idx];
-        p = p.setColumn("xfacet-text", xfont.text);
-        p = p.setColumn("xfacet-size", xfont.size);
-        p = p.setColumn("yfacet-text", yfont.text);
-        p = p.setColumn("yfacet-size", yfont.size);
-        return p;
-      });
-    };
-
-    Layout.prototype.compute = function(pairtable, params) {
-      var lc, md;
-      pairtable = pairtable.ensure(['facet-x', 'facet-y']);
-      md = pairtable.getMD();
-      lc = md.get(0, 'lc');
-      md = this.layoutLabels(md, params, lc);
-      md = this.layoutPanes(md, params, lc);
-      return new gg.data.PairTable(pairtable.getTable(), md);
+      return datas;
     };
 
     return Layout;
@@ -19506,12 +17600,18 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this.params.put("location", "client");
     };
 
-    Render.prototype.renderLabels = function(md, params, lc) {
-      var b2translate, bgC, c, fXLabel, fYLabel, hRatio, matrix, options, plotC, plotSvg, svg, transform, wRatio, xalC, xflC, yalC, yalSvg, yflC, _i, _len, _ref;
+    Render.prototype.renderLabels = function(datas, params, lc) {
+      var b2translate, bgC, c, envs, fXLabel, fYLabel, hRatio, matrix, options, plotC, plotSvg, svg, tables, transform, wRatio, xalC, xflC, yalC, yalSvg, yflC;
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
       options = params.get('options');
       fXLabel = params.get('fXLabel');
       fYLabel = params.get('fYLabel');
-      svg = md.get(0, 'svg').facets;
+      svg = _.first(envs).get('svg').facets;
       bgC = lc.background;
       xflC = lc.xFacetLabelC;
       yflC = lc.yFacetLabelC;
@@ -19532,15 +17632,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         width: bgC.w(),
         height: bgC.h()
       }, 'rect');
-      wRatio = plotC.w() / bgC.w();
-      hRatio = plotC.h() / bgC.h();
-      transform = "" + (b2translate(plotC)) + "scale(" + wRatio + "," + hRatio + ")";
-      matrix = "" + wRatio + ",0,0," + hRatio + "," + plotC.x0 + "," + plotC.y0;
-      plotSvg = _.subSvg(svg, {
-        transform: "matrix(" + matrix + ")",
-        "class": 'graphic-with-margin',
-        container: plotC.toString()
-      });
       if ((xflC != null) && xflC.v()) {
         _.subSvg(svg, {
           transform: "translate(" + xflC.x0 + ", " + xflC.y0 + ")",
@@ -19579,12 +17670,18 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           dy: "1em"
         }, 'text').text(options.yaxis);
       }
-      _ref = md.getColumn('svg');
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        svg = _ref[_i];
-        svg.plot = plotSvg;
-      }
-      return md;
+      wRatio = plotC.w() / bgC.w();
+      hRatio = plotC.h() / bgC.h();
+      transform = "" + (b2translate(plotC)) + "scale(" + wRatio + "," + hRatio + ")";
+      matrix = "" + wRatio + ",0,0," + hRatio + "," + plotC.x0 + "," + plotC.y0;
+      plotSvg = _.subSvg(svg, {
+        transform: "matrix(" + matrix + ")",
+        "class": 'graphic-with-margin',
+        container: plotC.toString()
+      });
+      return _.each(envs, function(env) {
+        return env.get('svg').plot = plotSvg;
+      });
       /*
           draw = (c, fill) ->
             _.subSvg svg, {
@@ -19606,13 +17703,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     };
 
-    Render.prototype.compute = function(pairtable, params) {
-      var lc, md;
-      md = pairtable.getMD();
-      lc = md.get(0, 'lc');
-      md = this.renderLabels(md, params, lc);
-      md = md.setColumn('lc', lc);
-      return new gg.data.PairTable(pairtable.getTable(), md);
+    Render.prototype.compute = function(datas, params) {
+      var lc;
+      lc = _.first(datas).env.get('lc');
+      this.renderLabels(datas, params, lc);
+      _.each(datas, function(data) {
+        return data.env.put('lc', lc);
+      });
+      return datas;
     };
 
     Render.fromSpec = function(spec) {
@@ -19639,18 +17737,146 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         name: 'facet-layout2',
         params: this.layoutParams
       }).compile();
-      this._renderpanes = new gg.facet.pane.Svg({
+      this.renderpanes = new gg.facet.pane.Svg({
         name: 'render-panes'
       }).compile();
     }
 
     Facets.prototype.renderPanes = function() {
-      return this._renderpanes;
+      return this.renderpanes;
+    };
+
+    Facets.prototype.labelerNodes = function() {
+      var f;
+      f = function(data, param) {
+        var Facets, env, table, x, y;
+        table = data.table;
+        env = data.env;
+        Facets = gg.facet.base.Facets;
+        x = env.get(Facets.facetXKey);
+        y = env.get(Facets.facetYKey);
+        table.addConstColumn(Facets.facetXKey, x);
+        table.addConstColumn(Facets.facetYKey, y);
+        return table;
+      };
+      new gg.wf.Exec({
+        name: "labeler",
+        params: {
+          f: f
+        }
+      });
+      return [new gg.facet.grid.Labeler, new gg.facet.grid.FillFacets];
     };
 
     return Facets;
 
   })(gg.facet.base.Facets);
+
+  gg.facet.grid.FillFacets = (function(_super) {
+
+    __extends(FillFacets, _super);
+
+    function FillFacets() {
+      return FillFacets.__super__.constructor.apply(this, arguments);
+    }
+
+    FillFacets.ggpackage = "gg.facet.grid.FillFacets";
+
+    FillFacets.prototype.parseSpec = function() {
+      return this.params.ensure("klassname", [], this.constructor.ggpackage);
+    };
+
+    FillFacets.prototype.compute = function(datas, params) {
+      var Facets, data, envBase, filledDatas, getXFacet, getYFacet, newData, schemaBase, x, xy2data, xys, y, _i, _len,
+        _this = this;
+      Facets = gg.facet.base.Facets;
+      getXFacet = function(env) {
+        return env.get(Facets.facetXKey);
+      };
+      getYFacet = function(env) {
+        return env.get(Facets.facetYKey);
+      };
+      if (datas.length === 0) {
+        return datas;
+      }
+      schemaBase = datas[0].table.schema.clone();
+      envBase = datas[0].env.clone();
+      xys = envBase.get(Facets.facetXYKeys);
+      xy2data = _.o2map(datas, function(data) {
+        var xy;
+        xy = [getXFacet(data.env), getYFacet(data.env)];
+        return [JSON.stringify(xy), data];
+      });
+      this.log("xys: " + (JSON.stringify(xys)));
+      newData = function(x, y) {
+        var data, env, table;
+        table = new gg.data.RowTable(schemaBase.clone());
+        env = envBase.clone();
+        env.put(Facets.facetXKey, x);
+        env.put(Facets.facetYKey, y);
+        data = new gg.wf.Data(table, env);
+        _this.log("created dummy for        facet " + x + ", " + y + " and        input " + inputidx);
+        return data;
+      };
+      filledDatas = _.map(xys, function(_arg) {
+        var data, key, x, y;
+        x = _arg[0], y = _arg[1];
+        key = JSON.stringify([x, y]);
+        data = xy2data[key];
+        if (data == null) {
+          data = newData(x, y);
+        }
+        data.table.addConstColumn(Facets.facetXKey, x);
+        data.table.addConstColumn(Facets.facetYKey, y);
+        return data;
+      });
+      for (_i = 0, _len = filledDatas.length; _i < _len; _i++) {
+        data = filledDatas[_i];
+        x = getXFacet(data.env);
+        y = getYFacet(data.env);
+        this.log("data " + x + " " + y + " has " + (data.table.nrows()));
+      }
+      return filledDatas;
+    };
+
+    return FillFacets;
+
+  })(gg.wf.Block);
+
+  gg.facet.grid.Labeler = (function(_super) {
+
+    __extends(Labeler, _super);
+
+    function Labeler() {
+      return Labeler.__super__.constructor.apply(this, arguments);
+    }
+
+    Labeler.ggpackage = "gg.facet.grid.Labeler";
+
+    Labeler.prototype.compute = function(datas, params) {
+      var Facets, data, getXFacet, getYFacet, xs, xys, ys, _i, _len;
+      Facets = gg.facet.base.Facets;
+      getXFacet = function(data) {
+        return data.env.get(Facets.facetXKey);
+      };
+      getYFacet = function(data) {
+        return data.env.get(Facets.facetYKey);
+      };
+      xs = _.uniq(_.map(datas, getXFacet));
+      ys = _.uniq(_.map(datas, getYFacet));
+      xys = _.cross(xs, ys);
+      this.log("xs: " + (JSON.stringify(xs)));
+      this.log("ys: " + (JSON.stringify(ys)));
+      for (_i = 0, _len = datas.length; _i < _len; _i++) {
+        data = datas[_i];
+        data.env.put(Facets.facetXYKeys, xys);
+      }
+      return datas;
+    };
+
+    return Labeler;
+
+  })(gg.core.BForm);
 
   gg.facet.grid.Layout = (function(_super) {
 
@@ -19662,138 +17888,235 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Layout.ggpackage = "gg.facet.grid.Layout";
 
-    Layout.prototype.layoutPanes = function(md, params, lc) {
-      var container, css, facetKeys, grid, h, labelHeight, log, nxs, nys, paddingPane, partitions, showXAxis, showXFacet, showYAxis, showYFacet, tmp, w, xAxisW, xFacet, xTextF, xdims, xs, xytable, yAxisW, yFacet, yTextF, ydims, ys, _ref;
-      xFacet = 'facet-x';
-      yFacet = 'facet-y';
-      facetKeys = [xFacet, yFacet];
-      paddingPane = params.get('paddingPane');
-      showXAxis = params.get('showXAxis');
-      showYAxis = params.get('showYAxis');
+    Layout.prototype.layoutPanes = function(datas, params, lc) {
+      var aes, container, css, dims, drawC, env, envs, fdata, fdatas, fenvs, fit, grid, h, labelHeight, log, map, minsize, nonPaneH, nonPaneHs, nonPaneW, nonPaneWs, nxs, nys, optfont, paddingPane, paneC, paneH, paneW, scaleSet, set, showXAxis, showXFacet, showYAxis, showYFacet, tables, text, ts, type, w, x, xfc, xfont, xfonts, xidx, xrange, xs, y, yAxisW, yfc, yfont, yfonts, yidx, yrange, ys, _i, _j, _k, _l, _len, _len1, _len10, _len11, _len2, _len3, _len4, _len5, _len6, _len7, _len8, _len9, _m, _n, _o, _p, _q, _r, _ref, _ref1, _ref2, _ref3, _ref4, _results, _s, _t;
+      tables = _.map(datas, function(d) {
+        return d.table;
+      });
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
       log = this.log;
       container = lc.plotC;
       _ref = [container.w(), container.h()], w = _ref[0], h = _ref[1];
-      xs = _.uniq(md.getColumn(xFacet));
-      ys = _.uniq(md.getColumn(yFacet));
+      paddingPane = params.get('paddingPane');
+      showXAxis = params.get('showXAxis');
+      showYAxis = params.get('showYAxis');
+      xs = this.xFacetVals(datas);
+      ys = this.yFacetVals(datas);
       nxs = xs.length;
       nys = ys.length;
+      log("paddingPane, envs, xs, ys:");
+      log(paddingPane);
+      log(envs);
+      log(xs);
+      log(ys);
+      for (xidx = _i = 0, _len = xs.length; _i < _len; xidx = ++_i) {
+        x = xs[xidx];
+        for (yidx = _j = 0, _len1 = ys.length; _j < _len1; yidx = ++_j) {
+          y = ys[yidx];
+          ts = gg.core.FormUtil.facetTables(datas, x, y);
+          log(ts);
+          log("facet " + x + " " + y + " has " + (_.map(ts, function(t) {
+            return t.nrows();
+          })) + " rows");
+        }
+      }
       css = {
         'font-size': '10pt'
       };
+      dims = _.textSize(this.getMaxYText(datas), css);
+      yAxisW = dims.w + paddingPane;
       labelHeight = _.exSize().h + paddingPane;
-      showXFacet = xs.length > 1 && (xs[0] != null);
-      showYFacet = ys.length > 1 && (ys[0] != null);
-      xdims = _.textSize(this.getMaxText(md, 'x'), css);
-      ydims = _.textSize(this.getMaxText(md, 'y'), css);
-      yAxisW = ydims.w + paddingPane;
-      xAxisW = xdims.w + paddingPane;
-      log("paddingPane, md, xs, ys:");
-      log(paddingPane);
-      log(md.raw());
-      log(xs);
-      log(ys);
-      grid = new gg.facet.grid.PaneGrid(xs, ys, {
-        showXFacet: showXFacet,
-        showYFacet: showYFacet,
-        showXAxis: showXAxis,
-        showYAxis: showYAxis,
-        labelHeight: labelHeight,
-        yAxisW: yAxisW,
-        xAxisW: xAxisW
-      });
-      grid.layout(w, h);
-      xytable = gg.data.Transform.cross({
-        'facet-x': xs,
-        'facet-y': ys
-      });
-      tmp = new gg.data.PairTable(xytable, md);
-      tmp = tmp.ensure(facetKeys);
-      md = tmp.getMD();
-      xTextF = gg.util.Textsize.fitMany(xs, grid.paneW, labelHeight + paddingPane, 8, {
-        padding: 2
-      });
-      yTextF = gg.util.Textsize.fitMany(ys, grid.paneH, labelHeight + paddingPane, 8, {
-        padding: 2
-      });
-      partitions = md.partition(facetKeys);
-      partitions = _.map(partitions, function(p) {
-        var drawC, paneC, s, set, x, xopts, xrange, y, yopts, yrange, _i, _j, _k, _len, _len1, _len2, _ref1, _ref2, _ref3;
-        x = p.get(0, xFacet);
-        y = p.get(0, yFacet);
-        paneC = grid.getByVal(x, y);
-        drawC = paneC.drawC();
-        p = p.setColumn('paneC', paneC, gg.data.Schema.object);
-        p = p.setColumn('xfacettext-opts', {
-          text: x,
-          size: 8
+      showXFacet = !(xs.length === 1 && !(xs[0] != null));
+      showYFacet = !(ys.length === 1 && !(ys[0] != null));
+      log("yAxisW: " + yAxisW);
+      grid = _.map(xs, function(x, xidx) {
+        return _.map(ys, function(y, yidx) {
+          var bXAxis, bXFacet, bYAxis, bYFacet;
+          bXFacet = showXFacet && yidx === 0;
+          bYFacet = showYFacet && xidx >= nxs - 1;
+          bXAxis = showXAxis && yidx >= nys - 1;
+          bYAxis = showYAxis && xidx === 0;
+          log("pane(" + xidx + "," + yidx + "): x/yfacet: " + bXFacet + ", " + bYFacet + "\tx/yaxis: " + bXAxis + ", " + bYAxis);
+          return new gg.facet.pane.Container(gg.core.Bound.empty(), xidx, yidx, bXFacet, bYFacet, bXAxis, bYAxis, labelHeight, yAxisW);
         });
-        p = p.setColumn('yfacettext-opts', {
-          text: y,
-          size: 8
+      });
+      nonPaneWs = _.times(nys, function() {
+        return 0;
+      });
+      nonPaneHs = _.times(nxs, function() {
+        return 0;
+      });
+      _.each(grid, function(paneCol, xidx) {
+        return _.each(paneCol, function(pane, yidx) {
+          var dx, dy;
+          dx = labelHeight * pane.bYFacet + yAxisW * pane.bYAxis;
+          dy = labelHeight * (pane.bXFacet + pane.bXAxis);
+          nonPaneWs[yidx] += dx;
+          return nonPaneHs[xidx] += dy;
         });
-        xrange = [paddingPane, drawC.w() - 2 * paddingPane];
-        yrange = [paddingPane, drawC.h() - 2 * paddingPane];
-        _ref1 = p.getColumn('scales');
-        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          set = _ref1[_i];
-          _ref2 = set.getAll(gg.scale.Scale.xs);
-          for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-            s = _ref2[_j];
-            s.range(xrange);
-          }
-          _ref3 = set.getAll(gg.scale.Scale.ys);
-          for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
-            s = _ref3[_k];
-            s.range(yrange);
+      });
+      nonPaneW = _.mmax(nonPaneWs);
+      nonPaneH = _.mmax(nonPaneHs);
+      paneH = (h - nonPaneH) / nys;
+      paneW = (w - nonPaneW) / nxs;
+      log("creating bounds objects for each pane");
+      _.each(grid, function(paneCol, xidx) {
+        return _.each(paneCol, function(pane, yidx) {
+          var dx, dy;
+          pane.c.x1 = paneW;
+          pane.c.y1 = paneH;
+          dx = _.sum(_.times(xidx, function(pxidx) {
+            return grid[pxidx][yidx].w();
+          }));
+          dy = _.sum(_.times(yidx, function(pyidx) {
+            return grid[xidx][pyidx].h();
+          }));
+          pane.c.d(dx, dy);
+          pane.c.d(pane.yAxisC().w(), pane.xFacetC().h());
+          return log("pane(" + xs[xidx] + "," + ys[yidx] + "): " + (pane.c.toString()));
+        });
+      });
+      map = {};
+      for (xidx = _k = 0, _len2 = xs.length; _k < _len2; xidx = ++_k) {
+        x = xs[xidx];
+        for (yidx = _l = 0, _len3 = ys.length; _l < _len3; yidx = ++_l) {
+          y = ys[yidx];
+          paneC = grid[xidx][yidx];
+          map[[x, y]] = paneC;
+          fdatas = gg.core.FormUtil.facetDatas(datas, x, y);
+          for (_m = 0, _len4 = fdatas.length; _m < _len4; _m++) {
+            fdata = fdatas[_m];
+            env = fdata.env;
+            env.put('paneC', paneC);
+            drawC = paneC.drawC();
+            xrange = [paddingPane, drawC.w() - 2 * paddingPane];
+            yrange = [paddingPane, drawC.h() - 2 * paddingPane];
+            scaleSet = gg.core.FormUtil.scales(fdata);
+            _ref1 = gg.scale.Scale.xs;
+            for (_n = 0, _len5 = _ref1.length; _n < _len5; _n++) {
+              aes = _ref1[_n];
+              _ref2 = scaleSet.types(aes);
+              for (_o = 0, _len6 = _ref2.length; _o < _len6; _o++) {
+                type = _ref2[_o];
+                scaleSet.scale(aes, type).range(xrange);
+              }
+            }
+            _ref3 = gg.scale.Scale.ys;
+            for (_p = 0, _len7 = _ref3.length; _p < _len7; _p++) {
+              aes = _ref3[_p];
+              _ref4 = scaleSet.types(aes);
+              for (_q = 0, _len8 = _ref4.length; _q < _len8; _q++) {
+                type = _ref4[_q];
+                scaleSet.scale(aes, type).range(yrange);
+              }
+            }
           }
         }
-        xopts = xTextF(x);
-        yopts = yTextF(y);
-        p = p.setColumn('xfacettext-opts', xopts);
-        p = p.setColumn('yfacettext-opts', yopts);
-        return p;
+      }
+      set = _.first(gg.core.FormUtil.scalesList(datas));
+      this.log("grid layout scale set");
+      this.log(set.toString());
+      fit = function() {
+        var args, _ref5;
+        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+        return (_ref5 = gg.util.Textsize).fit.apply(_ref5, args);
+      };
+      xfonts = [];
+      yfonts = [];
+      for (xidx = _r = 0, _len9 = xs.length; _r < _len9; xidx = ++_r) {
+        x = xs[xidx];
+        text = String(x);
+        paneC = grid[xidx][0];
+        xfc = paneC.xFacetC();
+        optfont = fit(text, xfc.w(), xfc.h(), 8, {
+          padding: 2
+        });
+        xfonts.push(optfont);
+        this.log("optfont x " + text + ": " + (JSON.stringify(optfont)));
+      }
+      for (yidx = _s = 0, _len10 = ys.length; _s < _len10; yidx = ++_s) {
+        y = ys[yidx];
+        text = String(y);
+        paneC = grid[nxs - 1][yidx];
+        yfc = paneC.yFacetC();
+        optfont = fit(text, yfc.h(), yfc.w(), 8, {
+          padding: 2
+        });
+        yfonts.push(optfont);
+        this.log("optfont y " + text + ": " + (JSON.stringify(optfont)));
+      }
+      minsize = _.min(xfonts, function(f) {
+        return f.size;
+      }).size;
+      _.each(xfonts, function(f) {
+        return f.size = minsize;
       });
-      /*
-          # Compute font sizes and add to md
-          #
-          _.map partitions, (p) ->
-      
-      
-      
-          for x, xidx in xs
-            text = String x
-            paneC = grid.getByIdx xidx, 0
-            xfc = paneC.xFacetC()
-            optfont = fit text, xfc.w(), xfc.h(), 8, {padding: 2}
-            xfonts[x] = optfont
-            @log "optfont x #{text}: #{JSON.stringify optfont}"
-      
-          for y, yidx in ys
-            text = String y
-            paneC = grid.getByIdx nxs-1, yidx
-            yfc = paneC.yFacetC()
-            optfont = fit text, yfc.h(), yfc.w(), 8, {padding: 2}
-            yfonts[y] = optfont
-            @log "optfont y #{text}: #{JSON.stringify optfont}"
-      
-          xminsize = _.min(xfonts, (f) -> f.size).size
-          yminsize = _.min(yfonts, (f) -> f.size).size
-          _.each xfonts, (f) -> f.size = xminsize
-          _.each yfonts, (f) -> f.size = yminsize
-      
-          partitions = _.map partitions, (p) ->
-            fkey = _.map facetKeys, (fk) -> p.get 0, fk
-            paneC = grid.getByVal fkey[0], fkey[1]
-            xfont = xfonts[fkey[0]]
-            yfont = yfonts[fkey[1]]
-            p = p.setColumn 'xfacet-text', xfont.text
-            p = p.setColumn 'xfacet-size', xfont.size
-            p = p.setColumn 'yfacet-text', yfont.text
-            p = p.setColumn 'yfacet-size', yfont.size
-            p
-      */
+      minsize = _.min(yfonts, function(f) {
+        return f.size;
+      }).size;
+      _.each(yfonts, function(f) {
+        return f.size = minsize;
+      });
+      _results = [];
+      for (xidx = _t = 0, _len11 = xs.length; _t < _len11; xidx = ++_t) {
+        x = xs[xidx];
+        _results.push((function() {
+          var _len12, _results1, _u;
+          _results1 = [];
+          for (yidx = _u = 0, _len12 = ys.length; _u < _len12; yidx = ++_u) {
+            y = ys[yidx];
+            xfont = xfonts[xidx];
+            yfont = yfonts[yidx];
+            fenvs = gg.core.FormUtil.facetEnvs(datas, x, y);
+            this.log("fenvs for " + x + " - " + y);
+            _results1.push((function() {
+              var _len13, _results2, _v;
+              _results2 = [];
+              for (_v = 0, _len13 = fenvs.length; _v < _len13; _v++) {
+                env = fenvs[_v];
+                env.put("xfacet-text", xfont.text);
+                env.put("xfacet-size", xfont.size);
+                env.put("yfacet-text", yfont.text);
+                _results2.push(env.put("yfacet-size", yfont.size));
+              }
+              return _results2;
+            })());
+          }
+          return _results1;
+        }).call(this));
+      }
+      return _results;
+    };
 
-      return new gg.data.MultiTable(null, partitions);
+    Layout.prototype.xy2paneId = function(x, y, xs, ys) {
+      var xidx, yidx;
+      xidx = _.indexOf(xs, x);
+      yidx = _.indexOf(ys, y);
+      return xidx + yidx * xs.length;
+    };
+
+    Layout.prototype.getMaxYText = function(datas) {
+      var envs, formatter, scalesList, text;
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
+      scalesList = gg.core.FormUtil.scalesList(datas);
+      text = "100";
+      formatter = d3.format(",.0f");
+      _.each(scalesList, function(scaleSet) {
+        var y, yscale, _text;
+        yscale = scaleSet.scale('y', gg.data.Schema.unknown);
+        y = yscale.maxDomain();
+        if (_.isNumber) {
+          _text = formatter(y);
+          if ((_text != null) && _text.length > text.length) {
+            return text = _text;
+          }
+        }
+      });
+      return text;
     };
 
     return Layout;
@@ -19815,32 +18138,29 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return this.params.put("location", "client");
     };
 
-    Svg.b2translate = function(b) {
-      return "translate(" + b.x0 + "," + b.y0 + ")";
-    };
-
-    Svg.prototype.b2translate = function(b) {
-      return this.constructor.b2translate(b);
-    };
-
-    Svg.prototype.renderFacetPane = function(md, params) {
-      var dataPaneSvg, dc, el, eventCoordinator, eventName, facetId, layerIdx, paneC, scaleSet, svg, xac, xfc, xscale, yac, yfc, yscale;
-      svg = md.get(0, 'svg').plot;
-      paneC = md.get(0, 'paneC');
-      eventCoordinator = md.get(0, 'event');
-      facetId = md.get(0, 'facet-id');
+    Svg.prototype.compute = function(data, params) {
+      var axis, b2translate, dc, el, em, env, info, layerIdx, nticks, paneC, paneSvg, scaleSet, size, svg, table, text, tickSize, xac, xac2, xael, xfc, xfel, xscale, yac, yac2, yael, yfc, yfel, yftext, yscale;
+      table = data.table;
+      env = data.env;
+      svg = env.get('svg').plot;
+      b2translate = function(b) {
+        return "translate(" + b.x0 + "," + b.y0 + ")";
+      };
+      paneC = env.get('paneC');
       if (paneC == null) {
-        return null;
+        return table;
       }
-      layerIdx = md.get(0, 'layer');
-      scaleSet = md.get(0, 'scales');
+      info = this.paneInfo(data, params);
+      layerIdx = info.layer;
+      scaleSet = this.scales(data, params);
       dc = paneC.drawC();
       xfc = paneC.xFacetC();
       yfc = paneC.yFacetC();
       xac = paneC.xAxisC();
       yac = paneC.yAxisC();
-      xscale = scaleSet.scale('x', gg.data.Schema.unknown);
-      yscale = scaleSet.scale('y', gg.data.Schema.unknown);
+      em = _.textSize("m", {
+        padding: 2
+      });
       this.log("panec: " + (paneC.toString()));
       this.log("bound: " + (paneC.bound().toString()));
       this.log("drawC: " + (paneC.drawC().toString()));
@@ -19848,274 +18168,116 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (yfc != null) {
         this.log("yFacet:" + (yfc.toString()));
       }
+      this.log("em: " + em);
       this.log("layer: " + layerIdx);
       el = _.subSvg(svg, {
         "class": "pane-container layer-" + layerIdx,
         'z-index': "" + (layerIdx + 1),
-        transform: this.b2translate(paneC.bound()),
+        transform: b2translate(paneC.bound()),
         container: paneC.bound().toString()
       });
-      this.renderBg(el, dc);
-      this.renderXAxis(el, dc, xac, xscale, {
-        show: paneC.bXAxis
-      });
-      this.renderYAxis(el, dc, yac, yscale, {
-        show: paneC.bYAxis
-      });
-      dataPaneSvg = _.subSvg(el, {
-        "class": 'data-pane facet-grid',
-        transform: this.b2translate(dc),
-        width: dc.w(),
-        height: dc.h(),
-        id: "facet-grid-" + paneC.xidx + "-" + paneC.yidx
-      });
-      eventName = "brush-" + facetId;
-      this.renderBrushes(dataPaneSvg, xscale, yscale, eventCoordinator, eventName);
-      if (paneC.bXFacet) {
-        this.renderXFacet(el, xfc, md);
-      }
-      if (paneC.bYFacet) {
-        this.renderYFacet(el, yfc, md);
-      }
-      return el;
-    };
-
-    Svg.prototype.renderBg = function(el, container) {
-      var bg;
-      bg = el.insert('rect', ':first-child');
-      bg.attr({
-        width: container.w(),
-        height: container.h(),
-        transform: this.b2translate(container),
-        'z-index': 0,
-        "class": 'pane-background facet-grid-background'
-      });
-      return bg;
-    };
-
-    Svg.prototype.renderXFacet = function(el, container, md) {
-      var opts, size, text, xfel;
-      opts = md.get(0, 'xfacettext-opts');
-      text = opts.text;
-      size = opts.size;
-      xfel = el.append('g');
-      xfel.attr({
-        "class": "facet-label x",
-        transform: this.b2translate(container)
-      });
-      _.subSvg(xfel, {
-        width: container.w(),
-        height: container.h()
-      }, "rect");
-      return _.subSvg(xfel, {
-        x: container.w() / 2,
-        y: container.h(),
-        dy: "-.25em",
-        "text-anchor": "middle"
-      }, "text").text(text).style("font-size", "" + size + "pt");
-    };
-
-    Svg.prototype.renderYFacet = function(el, container, md) {
-      var opts, size, text, yfel, yftext;
-      opts = md.get(0, 'yfacettext-opts');
-      text = opts.text;
-      size = opts.size;
-      yfel = el.append('g');
-      yfel.attr({
-        "class": "facet-label y",
-        transform: this.b2translate(container),
-        container: container.toString()
-      });
-      _.subSvg(yfel, {
-        width: container.w(),
-        height: container.h()
-      }, 'rect');
-      return yftext = _.subSvg(yfel, {
-        y: "-.25em",
-        x: container.h() / 2,
-        "text-anchor": "middle",
-        transform: "rotate(90)"
-      }, "text").text(text).style("font-size", "" + size + "pt");
-    };
-
-    Svg.prototype.renderXAxis = function(el, dc, container, xscale, tickOpts) {
-      var axis, blocksize, d3scale, domain, fmtr, n, nblocks, nticks, show, tickSize, ticks, ticksizes, widthAtTick, xac2, xael, _i, _j, _len, _len1, _ref, _ref1, _ref2;
-      if (tickOpts == null) {
-        tickOpts = {};
-      }
-      xac2 = container.clone();
-      xael = el.append('g');
-      xael.attr({
-        "class": 'axis x',
-        transform: this.b2translate(xac2)
-      });
-      show = tickOpts.show != null ? tickOpts.show : true;
-      tickSize = dc.h();
-      axis = d3.svg.axis().scale(xscale.d3()).orient('bottom');
-      axis.tickSize(-tickSize);
-      if (!show) {
-        axis.tickFormat('');
-      }
-      nticks = 5;
-      d3scale = xscale.d3();
-      domain = d3scale.domain();
-      if ((_ref = xscale.type) === gg.data.Schema.numeric || _ref === (xscale.type === gg.data.Schema.date)) {
-        fmtr = axis.tickFormat || d3scale.tickFormat;
-        if ((fmtr != null) && _.isFunction(fmtr)) {
-          fmtr = fmtr();
-        } else {
-          fmtr = String;
-        }
-        this.log("autotuning x axis ticks");
-        this.log("tickFormat is function: " + (_.isFunction(fmtr)));
-        if ((d3scale.ticks != null) && _.isFunction(fmtr)) {
-          nticks = 2;
-          _ref1 = _.range(1, 10);
-          for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-            n = _ref1[_i];
-            ticks = _.map(d3scale.ticks(n), fmtr);
-            ticksizes = _.map(ticks, function(tick) {
-              return gg.util.Textsize.textSize(tick, {
-                "class": "axis x"
-              }, xael[0][0]).width;
-            });
-            widthAtTick = _.sum(ticksizes);
-            this.log("ticks: " + (JSON.stringify(ticks)));
-            this.log("sizes: " + (JSON.stringify(ticksizes)));
-            this.log("width: " + widthAtTick);
-            if (widthAtTick < dc.w()) {
-              axis.ticks(nticks);
-            } else {
-              break;
-            }
-          }
-        }
-      } else if (xscale.type === gg.data.Schema.ordinal) {
-        _ref2 = _.range(1, 20);
-        for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-          n = _ref2[_j];
-          blocksize = Math.ceil(domain.length / n);
-          nblocks = Math.floor(domain.length / blocksize);
-          ticks = _.times(nblocks, function(block) {
-            return String(domain[block * blocksize]);
-          });
-          ticksizes = _.map(ticks, function(tick) {
-            return gg.util.Textsize.textSize(tick, {
-              "class": "axis x",
-              padding: 3
-            }, xael[0][0]).width;
-          });
-          widthAtTick = _.sum(ticksizes);
-          this.log("ticks: " + (JSON.stringify(ticks)));
-          this.log("sizes: " + (JSON.stringify(ticksizes)));
-          this.log("width: " + widthAtTick);
-          if (widthAtTick < dc.w()) {
-            axis.ticks(n);
-            axis.tickValues(ticks);
-          } else {
-            break;
-          }
-        }
-        this.log("final nticks: " + nticks);
-      }
-      return xael.call(axis);
-    };
-
-    Svg.prototype.renderYAxis = function(el, dc, container, yscale, tickOpts) {
-      var axis, em, nticks, show, tickSize, yac2, yael;
-      if (tickOpts == null) {
-        tickOpts = {};
-      }
-      yac2 = container.clone();
-      yac2.d(container.w(), 0);
-      yael = el.append('g');
-      yael.attr({
-        "class": 'axis y',
-        transform: this.b2translate(yac2)
-      });
-      show = tickOpts.show != null ? tickOpts.show : true;
-      axis = d3.svg.axis().scale(yscale.d3()).orient('left');
-      tickSize = dc.w();
-      axis.tickSize(-tickSize);
-      if (!show) {
-        axis.tickFormat('');
-      }
-      this.log("yaxis type: " + yscale.type);
-      this.log(yscale.toString());
-      if (yscale.type === gg.data.Schema.numeric) {
-        em = _.textSize("m", {
-          padding: 2,
-          "class": "axis y"
-        }, yael[0][0]);
-        nticks = Math.min(5, Math.ceil(dc.h() / em.h));
-        axis.ticks(nticks, d3.format(',.0f'), 5);
-        this.log("yaxis nticks " + nticks);
-      }
-      return yael.call(axis);
-    };
-
-    Svg.prototype.renderBrushes = function(el, xscale, yscale, eventCoordinator, eventName) {
-      var brush, brushf;
-      brushf = function() {
-        var bigger, maxx, maxy, minx, miny, pixelExtent, ylim, _ref, _ref1, _ref2;
-        _ref = brush.extent(), (_ref1 = _ref[0], minx = _ref1[0], miny = _ref1[1]), (_ref2 = _ref[1], maxx = _ref2[0], maxy = _ref2[1]);
-        minx = xscale.scale(minx);
-        maxx = xscale.scale(maxx);
-        ylim = Math.max(yscale.range()[0], yscale.range()[1]);
-        miny = yscale.scale(miny);
-        maxy = yscale.scale(maxy);
-        bigger = Math.max(miny, maxy);
-        miny = Math.min(miny, maxy);
-        maxy = bigger;
-        pixelExtent = [[minx, miny], [maxx, maxy]];
-        return eventCoordinator.emit(eventName, pixelExtent);
-      };
-      brush = d3.svg.brush().on('brush', brushf).x(xscale.d3()).y(yscale.d3());
-      return el.append('g').attr('class', 'brush').call(brush);
-    };
-
-    Svg.prototype.compute = function(pairtable, params) {
-      var els, f, md,
-        _this = this;
-      md = pairtable.getMD();
-      els = {};
-      els = _.o2map(md.partition('facet-id'), function(p) {
-        var facetid, svg;
-        facetid = p.get(0, 'facet-id');
-        svg = _this.renderFacetPane(p, params);
-        if (svg != null) {
-          return [facetid, svg];
-        }
-      });
-      f = function(row) {
-        var dc, el, facetId, layerIdx, paneC, paneSvg, svg;
-        paneC = row.get('paneC');
-        facetId = row.get('facet-id');
-        layerIdx = row.get('layer');
-        dc = paneC.drawC();
-        el = els[facetId];
-        paneSvg = el.select('.data-pane').insert('g', ':last-child');
-        paneSvg.attr({
-          "class": 'layer-pane facet-layer-grid',
+      if (layerIdx === 0) {
+        _.subSvg(el, {
           width: dc.w(),
           height: dc.h(),
-          id: "facet-grid-" + paneC.xidx + "-" + paneC.yidx + "-" + layerIdx,
-          container: gg.facet.pane.Svg.b2translate(paneC.bound())
+          transform: b2translate(dc),
+          'z-index': 0,
+          "class": 'pane-background facet-grid-background'
+        }, 'rect');
+      }
+      if (paneC.bXFacet && layerIdx === 0) {
+        text = env.get("xfacet-text");
+        size = env.get("xfacet-size");
+        xfel = _.subSvg(el, {
+          "class": "facet-label x",
+          transform: b2translate(xfc)
         });
-        svg = row.get('svg');
-        svg = _.o2map(svg, function(v, k) {
-          return [k, v];
+        _.subSvg(xfel, {
+          width: xfc.w(),
+          height: xfc.h()
+        }, "rect");
+        _.subSvg(xfel, {
+          x: xfc.w() / 2,
+          y: xfc.h(),
+          dy: "-.5em",
+          "text-anchor": "middle"
+        }, "text").text(text).style("font-size", "" + size + "pt");
+      }
+      if (paneC.bYFacet && layerIdx === 0) {
+        this.log(env);
+        text = env.get("yfacet-text");
+        size = env.get("yfacet-size");
+        yfel = _.subSvg(el, {
+          "class": "facet-label y",
+          transform: b2translate(yfc),
+          container: yfc.toString()
         });
-        svg.pane = paneSvg;
-        return svg;
-      };
-      md = gg.data.Transform.transform(md, [['svg', f, gg.data.Schema.object]]);
-      return new gg.data.PairTable(pairtable.getTable(), md);
+        _.subSvg(yfel, {
+          width: yfc.w(),
+          height: yfc.h()
+        }, "rect");
+        yftext = _.subSvg(yfel, {
+          y: "-.5em",
+          x: yfc.h() / 2,
+          "text-anchor": "middle",
+          transform: "rotate(90)"
+        }, "text").text(text).style("font-size", "" + size + "pt");
+      }
+      if (layerIdx === 0) {
+        xac2 = xac.clone();
+        xael = _.subSvg(el, {
+          "class": 'axis x',
+          transform: b2translate(xac2)
+        });
+        xscale = scaleSet.scale('x', gg.data.Schema.unknown);
+        axis = d3.svg.axis().scale(xscale.d3()).orient('bottom');
+        tickSize = dc.h();
+        axis.tickSize(-tickSize);
+        if (!paneC.bXAxis) {
+          axis.tickFormat('');
+        }
+        if (xscale.type === gg.data.Schema.numeric) {
+          axis.ticks(5);
+        }
+        xael.call(axis);
+      }
+      if (layerIdx === 0) {
+        yac2 = yac.clone();
+        yac2.d(yac.w(), 0);
+        yael = _.subSvg(el, {
+          "class": 'axis y',
+          transform: b2translate(yac2)
+        });
+        yscale = scaleSet.scale('y', gg.data.Schema.unknown);
+        axis = d3.svg.axis().scale(yscale.d3()).orient('left');
+        tickSize = dc.w();
+        axis.tickSize(-tickSize);
+        if (!paneC.bYAxis) {
+          axis.tickFormat('');
+        }
+        this.log("yaxis type: " + yscale.type);
+        this.log(yscale.toString());
+        if (yscale.type === gg.data.Schema.numeric) {
+          nticks = Math.min(5, Math.ceil(dc.h() / (1.1 * em.h)));
+          axis.ticks(nticks, d3.format(',.0f'), 5);
+          this.log("yaxis nticks " + nticks);
+        }
+        yael.call(axis);
+      }
+      paneSvg = _.subSvg(el, {
+        "class": 'layer-pane facet-grid',
+        transform: b2translate(dc),
+        width: dc.w(),
+        height: dc.h(),
+        id: "facet-grid-" + paneC.xidx + "-" + paneC.yidx + "-" + layerIdx
+      });
+      env.get('svg').pane = paneSvg;
+      return data;
     };
 
     return Svg;
 
-  })(gg.core.BForm);
+  })(gg.core.XForm);
 
   gg.facet.wrap.Facets = (function(_super) {
 
@@ -20158,10 +18320,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return Labeler.__super__.constructor.apply(this, arguments);
     }
 
-    Labeler.ggpackage = "gg.facet.wrap.Labeler";
+    Labeler.ggpackage = "gg.facet.grid.Labeler";
 
     Labeler.prototype.compute = function(datas, params) {
-      var Facets, getXFacet, getYFacet, xs, xys, ys;
+      var Facets, data, getXFacet, getYFacet, xs, xys, ys, _i, _len;
       Facets = gg.facet.base.Facets;
       getXFacet = function(data) {
         return data.env.get(Facets.facetXKey);
@@ -20174,10 +18336,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       xys = _.cross(xs, ys);
       this.log("xs: " + (JSON.stringify(xs)));
       this.log("ys: " + (JSON.stringify(ys)));
-      _.each(datas, function(data, idx) {
+      for (_i = 0, _len = datas.length; _i < _len; _i++) {
+        data = datas[_i];
         data.env.put(Facets.facetXYKeys, xys);
-        return data.env.put(Facets.facetId, "facet-" + idx);
-      });
+      }
       return datas;
     };
 
@@ -20193,58 +18355,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return Layout.__super__.constructor.apply(this, arguments);
     }
 
-    Layout.ggpackage = "gg.facet.wrap.Layout";
-
-    Layout.prototype.parseSpec = function() {
-      Layout.__super__.parseSpec.apply(this, arguments);
-      return this.params.ensureAll({
-        ncol: [[], null],
-        nrow: [[], null]
-      });
-    };
-
-    Layout.prototype.gridDimensions = function(n, container, params) {
-      var bestnxs, d, distance, h, nxs, nys, w, _i, _ref;
-      nxs = params.get("ncol");
-      nys = params.get("nrow");
-      _ref = [container.w(), container.h()], w = _ref[0], h = _ref[1];
-      if ((nxs != null) && (nys != null) && nxs * nys < n) {
-        nys = null;
-      }
-      if (!((nxs != null) || (nys != null))) {
-        bestnxs = 1;
-        distance = Infinity;
-        for (nxs = _i = 1; 1 <= n ? _i <= n : _i >= n; nxs = 1 <= n ? ++_i : --_i) {
-          nys = Math.ceil(n / nxs);
-          d = Math.pow((w / nxs) - (h / nys), 2);
-          if (d < distance) {
-            bestnxs = nxs;
-            distance = d;
-          }
-        }
-        nxs = bestnxs;
-        nys = null;
-        this.log("best nxs: " + nxs);
-      }
-      if (nxs == null) {
-        nxs = Math.ceil(n / nys);
-      }
-      if (nys == null) {
-        nys = Math.ceil(n / nxs);
-      }
-      this.log("computing facet grid dimensions");
-      this.log("nxs/nys: " + nxs + "/" + nys + " of " + n + " total panes");
-      return [nxs, nys];
-    };
+    Layout.ggpackage = "gg.facet.grid.Layout";
 
     Layout.prototype.layoutPanes = function(datas, params, lc) {
-      var bXAxis, bXFacet, bYAxis, bYFacet, container, css, dims, envs, grid, h, idx, labelHeight, nxs, nys, optX, optY, optfont, optxfont, optyfont, paddingPane, pane, paneC, paneH, paneW, showXAxis, showXFacet, showYAxis, showYFacet, tables, w, x, xfonts, xidx, xs, xys, y, yAxisW, yfonts, yidx, ys, _i, _j, _len, _len1, _ref, _ref1, _ref2, _ref3, _ref4, _ref5;
+      var aes, container, css, dims, drawC, env, envs, fdata, fdatas, fenvs, fit, grid, h, labelHeight, log, map, minsize, nonPaneH, nonPaneHs, nonPaneW, nonPaneWs, nxs, nys, optfont, paddingPane, paneC, paneH, paneW, scaleSet, set, showXAxis, showXFacet, showYAxis, showYFacet, tables, text, ts, type, w, x, xfc, xfont, xfonts, xidx, xrange, xs, y, yAxisW, yfc, yfont, yfonts, yidx, yrange, ys, _i, _j, _k, _l, _len, _len1, _len10, _len11, _len2, _len3, _len4, _len5, _len6, _len7, _len8, _len9, _m, _n, _o, _p, _q, _r, _ref, _ref1, _ref2, _ref3, _ref4, _results, _s, _t;
       tables = _.map(datas, function(d) {
         return d.table;
       });
       envs = _.map(datas, function(d) {
         return d.env;
       });
+      log = this.log;
       container = lc.plotC;
       _ref = [container.w(), container.h()], w = _ref[0], h = _ref[1];
       paddingPane = params.get('paddingPane');
@@ -20252,86 +18373,219 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       showYAxis = params.get('showYAxis');
       xs = this.xFacetVals(datas);
       ys = this.yFacetVals(datas);
-      xys = this.facetVals(datas);
-      this.log("paddingPane, envs");
-      this.log(paddingPane);
-      this.log(envs);
-      this.log("container: " + w + " x " + h);
+      nxs = xs.length;
+      nys = ys.length;
+      log("paddingPane, envs, xs, ys:");
+      log(paddingPane);
+      log(envs);
+      log(xs);
+      log(ys);
+      for (xidx = _i = 0, _len = xs.length; _i < _len; xidx = ++_i) {
+        x = xs[xidx];
+        for (yidx = _j = 0, _len1 = ys.length; _j < _len1; yidx = ++_j) {
+          y = ys[yidx];
+          ts = gg.core.FormUtil.facetTables(datas, x, y);
+          log(ts);
+          log("facet " + x + " " + y + " has " + (_.map(ts, function(t) {
+            return t.nrows();
+          })) + " rows");
+        }
+      }
       css = {
         'font-size': '10pt'
       };
-      dims = _.textSize(this.getMaxText(datas, 'y'), css);
+      dims = _.textSize(this.getMaxYText(datas), css);
       yAxisW = dims.w + paddingPane;
       labelHeight = _.exSize().h + paddingPane;
       showXFacet = !(xs.length === 1 && !(xs[0] != null));
       showYFacet = !(ys.length === 1 && !(ys[0] != null));
-      this.log("yAxisW: " + yAxisW);
-      _ref1 = this.gridDimensions(xys.length, container, params), nxs = _ref1[0], nys = _ref1[1];
-      grid = _.times(nxs, function() {
-        return _.times(nys, function() {
-          return null;
+      log("yAxisW: " + yAxisW);
+      grid = _.map(xs, function(x, xidx) {
+        return _.map(ys, function(y, yidx) {
+          var bXAxis, bXFacet, bYAxis, bYFacet;
+          bXFacet = showXFacet && yidx === 0;
+          bYFacet = showYFacet && xidx >= nxs - 1;
+          bXAxis = showXAxis && yidx >= nys - 1;
+          bYAxis = showYAxis && xidx === 0;
+          log("pane(" + xidx + "," + yidx + "): x/yfacet: " + bXFacet + ", " + bYFacet + "\tx/yaxis: " + bXAxis + ", " + bYAxis);
+          return new gg.facet.pane.Container(gg.core.Bound.empty(), xidx, yidx, bXFacet, bYFacet, bXAxis, bYAxis, labelHeight, yAxisW);
         });
       });
-      xidx = 0;
-      yidx = 0;
-      for (idx = _i = 0, _len = xys.length; _i < _len; idx = ++_i) {
-        _ref2 = xys[idx], x = _ref2[0], y = _ref2[1];
-        if (xidx >= grid.length || xidx < 0) {
-          this.log.err(xys);
-          this.log.err(grid);
-          throw Error("idx = " + idx + "  xidx " + xidx + " oob [0, " + grid.length + "]");
-        }
-        if (yidx >= grid[xidx].length || yidx < 0) {
-          this.log.err(xys);
-          this.log.err(grid);
-          throw Error("idx = " + idx + "  yidx " + yidx + " oob [0, " + grid[xidx].length + "]");
-        }
-        bXFacet = showXFacet;
-        bYFacet = showYFacet;
-        bXAxis = showXAxis && (idx >= xys.length - nxs);
-        bYAxis = showYAxis && xidx === 0;
-        pane = new gg.facet.pane.Container(gg.core.Bound.empty(), xidx, yidx, x, y, bXFacet, bYFacet, bXAxis, bYAxis, labelHeight, yAxisW);
-        grid[xidx][yidx] = pane;
-        xidx += 1;
-        if (xidx >= nxs) {
-          xidx = 0;
-          yidx += 1;
+      nonPaneWs = _.times(nys, function() {
+        return 0;
+      });
+      nonPaneHs = _.times(nxs, function() {
+        return 0;
+      });
+      _.each(grid, function(paneCol, xidx) {
+        return _.each(paneCol, function(pane, yidx) {
+          var dx, dy;
+          dx = labelHeight * pane.bYFacet + yAxisW * pane.bYAxis;
+          dy = labelHeight * (pane.bXFacet + pane.bXAxis);
+          nonPaneWs[yidx] += dx;
+          return nonPaneHs[xidx] += dy;
+        });
+      });
+      nonPaneW = _.mmax(nonPaneWs);
+      nonPaneH = _.mmax(nonPaneHs);
+      paneH = (h - nonPaneH) / nys;
+      paneW = (w - nonPaneW) / nxs;
+      log("creating bounds objects for each pane");
+      _.each(grid, function(paneCol, xidx) {
+        return _.each(paneCol, function(pane, yidx) {
+          var dx, dy;
+          pane.c.x1 = paneW;
+          pane.c.y1 = paneH;
+          dx = _.sum(_.times(xidx, function(pxidx) {
+            return grid[pxidx][yidx].w();
+          }));
+          dy = _.sum(_.times(yidx, function(pyidx) {
+            return grid[xidx][pyidx].h();
+          }));
+          pane.c.d(dx, dy);
+          pane.c.d(pane.yAxisC().w(), pane.xFacetC().h());
+          return log("pane(" + xs[xidx] + "," + ys[yidx] + "): " + (pane.c.toString()));
+        });
+      });
+      map = {};
+      for (xidx = _k = 0, _len2 = xs.length; _k < _len2; xidx = ++_k) {
+        x = xs[xidx];
+        for (yidx = _l = 0, _len3 = ys.length; _l < _len3; yidx = ++_l) {
+          y = ys[yidx];
+          paneC = grid[xidx][yidx];
+          map[[x, y]] = paneC;
+          fdatas = gg.core.FormUtil.facetDatas(datas, x, y);
+          for (_m = 0, _len4 = fdatas.length; _m < _len4; _m++) {
+            fdata = fdatas[_m];
+            env = fdata.env;
+            env.put('paneC', paneC);
+            drawC = paneC.drawC();
+            xrange = [paddingPane, drawC.w() - 2 * paddingPane];
+            yrange = [paddingPane, drawC.h() - 2 * paddingPane];
+            scaleSet = gg.core.FormUtil.scales(fdata);
+            _ref1 = gg.scale.Scale.xs;
+            for (_n = 0, _len5 = _ref1.length; _n < _len5; _n++) {
+              aes = _ref1[_n];
+              _ref2 = scaleSet.types(aes);
+              for (_o = 0, _len6 = _ref2.length; _o < _len6; _o++) {
+                type = _ref2[_o];
+                scaleSet.scale(aes, type).range(xrange);
+              }
+            }
+            _ref3 = gg.scale.Scale.ys;
+            for (_p = 0, _len7 = _ref3.length; _p < _len7; _p++) {
+              aes = _ref3[_p];
+              _ref4 = scaleSet.types(aes);
+              for (_q = 0, _len8 = _ref4.length; _q < _len8; _q++) {
+                type = _ref4[_q];
+                scaleSet.scale(aes, type).range(yrange);
+              }
+            }
+          }
         }
       }
-      _ref3 = this.computePaneSizes(grid, w, h, nxs, nys), paneW = _ref3[0], paneH = _ref3[1];
-      this.log("pane size: " + paneW + " x " + paneH);
-      this.setPaneBounds(grid, paneW, paneH);
-      this.addPanesToEnv(datas, grid, paddingPane);
+      set = _.first(gg.core.FormUtil.scalesList(datas));
+      this.log("grid layout scale set");
+      this.log(set.toString());
+      fit = function() {
+        var args, _ref5;
+        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+        return (_ref5 = gg.util.Textsize).fit.apply(_ref5, args);
+      };
       xfonts = [];
       yfonts = [];
-      _ref4 = _.flatten(grid);
-      for (_j = 0, _len1 = _ref4.length; _j < _len1; _j++) {
-        paneC = _ref4[_j];
-        if (paneC == null) {
-          continue;
-        }
-        _ref5 = this.optimizeFontSize(paneC), optX = _ref5[0], optY = _ref5[1];
-        xfonts.push(optX);
-        yfonts.push(optY);
+      for (xidx = _r = 0, _len9 = xs.length; _r < _len9; xidx = ++_r) {
+        x = xs[xidx];
+        text = String(x);
+        paneC = grid[xidx][0];
+        xfc = paneC.xFacetC();
+        optfont = fit(text, xfc.w(), xfc.h(), 8, {
+          padding: 2
+        });
+        xfonts.push(optfont);
+        this.log("optfont x " + text + ": " + (JSON.stringify(optfont)));
       }
-      optxfont = _.min(xfonts, function(f) {
+      for (yidx = _s = 0, _len10 = ys.length; _s < _len10; yidx = ++_s) {
+        y = ys[yidx];
+        text = String(y);
+        paneC = grid[nxs - 1][yidx];
+        yfc = paneC.yFacetC();
+        optfont = fit(text, yfc.h(), yfc.w(), 8, {
+          padding: 2
+        });
+        yfonts.push(optfont);
+        this.log("optfont y " + text + ": " + (JSON.stringify(optfont)));
+      }
+      minsize = _.min(xfonts, function(f) {
         return f.size;
-      });
-      optyfont = _.min(yfonts, function(f) {
-        return f.size;
-      });
-      optfont = _.min([optxfont, optyfont], function(f) {
-        return f.size;
-      });
+      }).size;
       _.each(xfonts, function(f) {
-        return f.size = optfont.size;
+        return f.size = minsize;
       });
+      minsize = _.min(yfonts, function(f) {
+        return f.size;
+      }).size;
       _.each(yfonts, function(f) {
-        return f.size = optfont.size;
+        return f.size = minsize;
       });
-      this.log(xfonts);
-      this.log(yfonts);
-      return this.setOptimalFacetFonts(datas, grid, xfonts, yfonts);
+      _results = [];
+      for (xidx = _t = 0, _len11 = xs.length; _t < _len11; xidx = ++_t) {
+        x = xs[xidx];
+        _results.push((function() {
+          var _len12, _results1, _u;
+          _results1 = [];
+          for (yidx = _u = 0, _len12 = ys.length; _u < _len12; yidx = ++_u) {
+            y = ys[yidx];
+            xfont = xfonts[xidx];
+            yfont = yfonts[yidx];
+            fenvs = gg.core.FormUtil.facetEnvs(datas, x, y);
+            this.log("fenvs for " + x + " - " + y);
+            _results1.push((function() {
+              var _len13, _results2, _v;
+              _results2 = [];
+              for (_v = 0, _len13 = fenvs.length; _v < _len13; _v++) {
+                env = fenvs[_v];
+                env.put("xfacet-text", xfont.text);
+                env.put("xfacet-size", xfont.size);
+                env.put("yfacet-text", yfont.text);
+                _results2.push(env.put("yfacet-size", yfont.size));
+              }
+              return _results2;
+            })());
+          }
+          return _results1;
+        }).call(this));
+      }
+      return _results;
+    };
+
+    Layout.prototype.xy2paneId = function(x, y, xs, ys) {
+      var xidx, yidx;
+      xidx = _.indexOf(xs, x);
+      yidx = _.indexOf(ys, y);
+      return xidx + yidx * xs.length;
+    };
+
+    Layout.prototype.getMaxYText = function(datas) {
+      var envs, formatter, scalesList, text;
+      envs = _.map(datas, function(d) {
+        return d.env;
+      });
+      scalesList = gg.core.FormUtil.scalesList(datas);
+      text = "100";
+      formatter = d3.format(",.0f");
+      _.each(scalesList, function(scaleSet) {
+        var y, yscale, _text;
+        yscale = scaleSet.scale('y', gg.data.Schema.unknown);
+        y = yscale.maxDomain();
+        if (_.isNumber) {
+          _text = formatter(y);
+          if ((_text != null) && _text.length > text.length) {
+            return text = _text;
+          }
+        }
+      });
+      return text;
     };
 
     return Layout;
@@ -20370,18 +18624,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.geom.Geom);
 
-  gg.geom.Bin2D = (function(_super) {
-
-    __extends(Bin2D, _super);
-
-    function Bin2D() {
-      return Bin2D.__super__.constructor.apply(this, arguments);
-    }
-
-    return Bin2D;
-
-  })(gg.geom.Geom);
-
   gg.geom.Boxplot = (function(_super) {
 
     __extends(Boxplot, _super);
@@ -20414,12 +18656,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return map;
     };
 
-    Boxplot.prototype.scaleConfigs = function() {
-      return {
-        x: 'ordinal'
-      };
-    };
-
     return Boxplot;
 
   })(gg.geom.Geom);
@@ -20439,9 +18675,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.reparam = new gg.geom.reparam.Line({
         name: "line-reparam"
       });
-      return this.render = new gg.geom.svg.Line({
-        name: "line-render"
-      });
+      return this.render = new gg.geom.svg.Line({});
     };
 
     Line.prototype.posMapping = function() {
@@ -20532,54 +18766,77 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Text.ggpackage = "gg.geom.reparam.Text";
 
+    Text.prototype.defaults = function() {
+      return {
+        group: "1"
+      };
+    };
+
     Text.prototype.inputSchema = function() {
       return ['x', 'y', 'text'];
     };
 
-    Text.prototype.outputSchema = function(pairtable, params) {
-      var schema, table;
-      table = pairtable.getTable();
+    Text.prototype.outputSchema = function(data, params) {
+      var numeric, schema, table;
+      table = data.table;
       schema = table.schema.clone();
-      _.each(["x0", "x1", "y0", "y1"], function(col) {
-        if (!schema.has(col)) {
-          return schema.addColumn(col, numeric);
+      _.each(["x0", "x1", "y0", "y1"], function(attr) {
+        if (!schema.contains(attr)) {
+          return schema.addColumn(attr, numeric);
         }
       });
       return schema;
+      numeric = gg.data.Schema.numeric;
+      return gg.data.Schema.fromSpec({
+        group: table.schema.typeObj("group"),
+        x: numeric,
+        x0: numeric,
+        x1: numeric,
+        y: numeric,
+        y0: numeric,
+        y1: numeric,
+        text: gg.data.Schema.ordinal
+      });
     };
 
-    Text.prototype.compute = function(pairtable, params) {
-      var cache, cols, getSize, mapping, table;
-      table = pairtable.getTable();
-      cache = {};
-      getSize = function(text) {
-        var len;
-        len = String(text).length;
-        if (!(len in cache)) {
-          cache[len] = _.textSize(text);
-        }
-        return cache[len];
-      };
-      cols = ['x', 'y', 'text'];
-      mapping = {
-        x0: function(row) {
-          return row.get('x');
-        },
-        x1: function(row) {
-          return row.get('x') + getSize(row.get('text')).w;
-        },
-        y0: function(row) {
-          return row.get('y');
-        },
-        y1: function(row) {
-          return row.get('y' + getSize(row.get('text')).h);
-        }
-      };
-      mapping = _.map(mapping, function(f, k) {
-        return [k, f, gg.data.Schema.numeric];
+    Text.prototype.compute = function(data, params) {
+      var attrs, env, inArr, table;
+      table = data.table;
+      env = data.env;
+      attrs = ['x', 'y', 'text'];
+      inArr = _.map(attrs, (function(attr) {
+        return table.schema.inArray(attr);
+      }));
+      if (!(_.all(inArr) || !(_.any(inArr)))) {
+        throw Error("attributes must all be in arrays or all not");
+      }
+      if (table.schema.inArray('x')) {
+        throw Error("don't support labels for within arrays");
+        table.each(function(row) {
+          var h, size, sizes, texts, w, xs, ys, _ref;
+          texts = row.get('text');
+          sizes = _.map(texts, _.textSize);
+          xs = row.get('x');
+          ys = row.get('y');
+          r;
+
+          size = _.textSize(row.get('Text'));
+          _ref = [size.w, size.h], w = _ref[0], h = _ref[1];
+          return [w, h];
+        });
+      }
+      table.each(function(row) {
+        var size, x, y;
+        x = row.get('x');
+        y = row.get('y');
+        size = _.textSize(row.get("text"));
+        row.set("x0", x);
+        row.set("x1", x + size.w);
+        row.set("y0", y);
+        return row.set("y1", y + size.h);
       });
-      table = gg.data.Transform.transform(table, mapping);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      table.setSchema(params.get('outputSchema')(data, params));
+      return data;
     };
 
     return Text;
@@ -20603,25 +18860,26 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         "stroke-width": 1,
         stroke: "steelblue",
         fill: "grey",
-        "fill-opacity": 0.7
+        "fill-opacity": 0.7,
+        group: 1
       };
     };
 
     Area.prototype.inputSchema = function() {
-      return ['x', 'y0', 'y1'];
+      return ['pts'];
     };
 
     Area.prototype.render = function(table, svg) {
-      var area, areas, cssOut, cssOver, enter, enterAreas, exit, linetables, _this;
+      var area, areas, cssOut, cssOver, enter, enterAreas, exit, rows, _this;
+      rows = table.asArray();
       area = d3.svg.area().x(function(d) {
-        return d.get('x');
+        return d.x;
       }).y0(function(d) {
-        return d.get('y0');
+        return d.y0;
       }).y1(function(d) {
-        return d.get('y1');
+        return d.y1;
       });
-      linetables = table.partition('group');
-      areas = this.groups(svg, 'areas', linetables).selectAll('path').data(function(d) {
+      areas = this.groups(svg, 'areas', rows).selectAll('path').data(function(d) {
         return [d];
       });
       enter = areas.enter();
@@ -20629,37 +18887,37 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       exit = areas.exit();
       this.applyAttrs(enterAreas, {
         "class": "path",
-        d: function(t) {
-          return area(t.getRows());
+        d: function(d) {
+          return area(d.get('pts'));
         },
-        "stroke": function(g) {
-          return g.get(0, 'stroke');
+        "stroke": function(t) {
+          return t.get("stroke");
         },
-        "stroke-width": function(g) {
-          return g.get(0, 'stroke-width');
+        "stroke-width": function(t) {
+          return t.get('stroke-width');
         },
-        "stroke-opacity": function(g) {
-          return g.get(0, "stroke-opacity");
+        "stroke-opacity": function(t) {
+          return t.get("stroke-opacity");
         },
-        fill: function(g) {
-          return g.get(0, 'fill');
+        fill: function(t) {
+          return t.get('fill');
         },
-        "fill-opacity": function(g) {
-          return g.get(0, 'fill-opacity');
+        "fill-opacity": function(t) {
+          return t.get('fill-opacity');
         }
       });
       cssOver = {
-        fill: function(g) {
-          return d3.rgb(g.get(0, "fill")).darker(2);
+        fill: function(t) {
+          return d3.rgb(t.get("fill")).darker(2);
         },
         "fill-opacity": 1
       };
       cssOut = {
-        fill: function(g) {
-          return g.get(0, 'fill');
+        fill: function(t) {
+          return t.get('fill');
         },
-        "fill-opacity": function(g) {
-          return g.get(0, 'fill-opacity');
+        "fill-opacity": function(t) {
+          return t.get('fill-opacity');
         }
       };
       _this = this;
@@ -20694,7 +18952,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         fill: "steelblue",
         stroke: "steelblue",
         "stroke-width": 0,
-        "stroke-opacity": 0.5
+        "stroke-opacity": 0.5,
+        group: 1
       };
     };
 
@@ -20702,32 +18961,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return ['x', 'y'];
     };
 
-    Point.brush = function(geoms) {
-      return function(extent) {
-        var maxx, maxy, minx, miny, _ref, _ref1;
-        (_ref = extent[0], minx = _ref[0], miny = _ref[1]), (_ref1 = extent[1], maxx = _ref1[0], maxy = _ref1[1]);
-        return geoms.attr('fill', function(d, i) {
-          var c, fill, row, valid, x, y;
-          c = d3.select(this);
-          row = c.datum();
-          fill = row.get('fill');
-          x = row.get('x');
-          y = row.get('y');
-          valid = minx <= x && maxx >= x && miny <= y && maxy >= y;
-          if (valid) {
-            return 'black';
-          } else {
-            return row.get('fill');
-          }
-        });
-      };
-    };
-
     Point.prototype.render = function(table, svg) {
       var circles, cssOut, cssOver, enter, enterCircles, exit, rows, _this;
       gg.wf.Stdout.print(table, ['x', 'fill'], 5, this.log);
-      rows = table.getRows();
-      circles = svg.append('g').classed('circles geoms', true).selectAll("circle").data(rows);
+      rows = table.asArray();
+      circles = this.agroup(svg, "circles geoms", rows).selectAll("circle").data(rows);
       enter = circles.enter();
       exit = circles.exit();
       enterCircles = enter.append("circle");
@@ -20802,7 +19040,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         "fill-opacity": "0.5",
         fill: "steelblue",
         dx: 10,
-        dy: 10
+        dy: 10,
+        group: 1
       };
     };
 
@@ -20812,10 +19051,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Text.prototype.render = function(table, svg) {
       var cssOut, cssOver, enter, enterTexts, exit, rows, texts, _this;
-      rows = table.getRows();
-      rows = _.uniq(rows, function(row) {
-        return JSON.stringify([row.get('x'), row.get('y'), row.get('text')]);
-      });
+      gg.wf.Stdout.print(table, null, 5, this.log);
+      rows = table.asArray();
       texts = this.agroup(svg, "text geoms", rows).selectAll("text").data(rows);
       enter = texts.enter();
       exit = texts.exit();
@@ -20863,7 +19100,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         return _this.applyAttrs(d3.select(this), cssOver);
       }).on("mouseout", function(d, idx) {
         return _this.applyAttrs(d3.select(this), cssOut);
-      }).on("brush", gg.geom.svg.Rect.brush(texts));
+      });
       return exit.transition().duration(500).attr("fill-opacity", 0).transition().remove();
     };
 
@@ -20953,7 +19190,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       };
     });
     console.log(rows.slice(0, 16));
-    console.log(spec);
     plot = new gg.core.Graphic(spec);
     return plot.render(domEl, rows);
   };
@@ -20968,52 +19204,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   this.gg.log = gg.util.Log;
 
-  gg.pos.Bin2D = (function(_super) {
-
-    __extends(Bin2D, _super);
-
-    function Bin2D() {
-      return Bin2D.__super__.constructor.apply(this, arguments);
-    }
-
-    Bin2D.ggpackage = "gg.pos.Bin2D";
-
-    Bin2D.aliases = ['2dbin', 'bin2d'];
-
-    Bin2D.prototype.parseSpec = function() {
-      var defaults;
-      defaults = {
-        nBins: 20,
-        gbAttrs: ['x', 'y'],
-        aggFuncs: {
-          count: {
-            type: 'count',
-            arg: 'z'
-          },
-          sum: {
-            type: 'sum',
-            arg: 'z'
-          },
-          r: {
-            type: 'count',
-            arg: 'z'
-          },
-          total: {
-            type: 'sum',
-            arg: 'z'
-          }
-        }
-      };
-      defaults = new gg.util.Params(defaults);
-      defaults.merge(this.params);
-      this.params = defaults;
-      return Bin2D.__super__.parseSpec.apply(this, arguments);
-    };
-
-    return Bin2D;
-
-  })(gg.xform.GroupBy);
-
   gg.pos.Dodge = (function(_super) {
 
     __extends(Dodge, _super);
@@ -21026,16 +19216,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Dodge.aliases = ["dodge"];
 
-    Dodge.prototype.defaults = function() {
-      return {
-        x0: 'x',
-        x1: 'x'
-      };
-    };
-
     Dodge.prototype.parseSpec = function() {
       Dodge.__super__.parseSpec.apply(this, arguments);
-      this.params.put('keys', ['facet-x', 'facet-y', 'layer']);
       return this.params.put("padding", _.findGoodAttr(this.spec, ['pad', 'padding'], 0.05));
     };
 
@@ -21043,163 +19225,53 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return ['x', 'x0', 'x1', 'group'];
     };
 
-    Dodge.prototype.compute = function(pairtable, params) {
-      var groupcol, groups, maxGroup, ngroups, nrows, padding, partitions, table;
-      table = pairtable.getTable();
-      partitions = table.partition(['x0', 'x1']);
-      nrows = _.map(partitions, function(p) {
-        return p.nrows();
+    Dodge.prototype.compute = function(data, params) {
+      var env, groups, key2Idx, keys, log, maxGroup, nkeys, padding, table,
+        _this = this;
+      table = data.table;
+      env = data.env;
+      groups = table.split(function(row) {
+        return [row.get('x0'), row.get('x1')];
       });
-      maxGroup = _.max(nrows);
-      groupcol = _.uniq(_.map(table.getColumn('group'), JSON.stringify));
-      ngroups = groupcol.length;
-      groups = table.partition('group');
-      padding = params.get('padding');
-      groups = _.map(groups, function(group, idx) {
-        var mapping, neww, newx;
-        neww = function(row) {
-          var width;
-          width = row.get('x1') - row.get('x0');
-          return width / ngroups;
-        };
-        newx = function(row) {
-          var newWidth, width;
-          width = row.get('x1') - row.get('x0');
-          newWidth = width / ngroups;
-          return row.get('x') - width / 2 + idx * newWidth + newWidth / 2;
-        };
-        mapping = {
-          x: newx,
-          x0: function(row) {
-            return newx(row) - (1.0 - padding) * neww(row) / 2;
-          },
-          x1: function(row) {
-            return newx(row) + (1.0 - padding) * neww(row) / 2;
-          }
-        };
-        mapping = _.map(mapping, function(f, k) {
-          return [k, f, gg.data.Schema.numeric];
-        });
-        return gg.data.Transform.transform(group, mapping);
+      maxGroup = _.mmax(groups, function(group) {
+        return group.table.nrows();
       });
-      table = new gg.data.MultiTable(null, groups);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      keys = _.uniq(_.flatten(_.map(groups, function(group) {
+        return _.uniq(group.table.getColumn("group"));
+      })));
+      keys = _.uniq(_.map(keys, function(key) {
+        return JSON.stringify(key);
+      }));
+      key2Idx = {};
+      _.each(keys, function(key, idx) {
+        _this.log.warn("key " + key + " -> " + idx);
+        return key2Idx[key] = idx;
+      });
+      nkeys = keys.length;
+      this.log.warn("ngroups: " + groups.length + "\tnKeys: " + nkeys);
+      log = this.log;
+      padding = 1.0 - params.get('padding');
+      table.each(function(row) {
+        var idx, key, newWidth, newx, newx0, newx1, width, x;
+        key = JSON.stringify(row.get("group"));
+        idx = key2Idx[key];
+        width = row.get('x1') - row.get('x0');
+        newWidth = padding * width / nkeys;
+        x = row.get('x');
+        newx = x - width / 2 + idx * newWidth + newWidth;
+        newx0 = newx - newWidth / 2;
+        newx1 = newx + newWidth / 2;
+        row.set('x', newx);
+        row.set('x0', newx0);
+        row.set('x1', newx1);
+        return log("" + key + "\tidx: " + idx + "\told: " + x + "," + width + "\tnew: " + newx + "," + newWidth);
+      });
+      return data;
     };
 
     return Dodge;
 
-  })(gg.core.XForm);
-
-  gg.pos.DotPlot = (function(_super) {
-
-    __extends(DotPlot, _super);
-
-    function DotPlot() {
-      return DotPlot.__super__.constructor.apply(this, arguments);
-    }
-
-    DotPlot.ggpackage = 'gg.pos.DotPlot';
-
-    DotPlot.aliases = ['dot', 'dotplot'];
-
-    DotPlot.prototype.parseSpec = function() {
-      var r;
-      DotPlot.__super__.parseSpec.apply(this, arguments);
-      r = _.findGood([this.spec.r, this.spec.radius, this.spec.size, 3]);
-      this.params.put('r', r);
-      return this.params.put('keys', ['facet-x', 'facet-y', 'layer']);
-    };
-
-    DotPlot.prototype.inputSchema = function() {
-      return ['x'];
-    };
-
-    DotPlot.prototype.outputSchema = function(pairtable, params) {
-      var newSchema, schema;
-      schema = pairtable.tableSchema().clone();
-      newSchema = gg.data.Schema.fromJSON({
-        y: gg.data.Schema.numeric,
-        r: gg.data.Schema.numeric
-      });
-      return schema.merge(newSchema);
-    };
-
-    DotPlot.prototype.compute = function(pairtable, params) {
-      var cmp, domain, md, miny, prevx, r, s, set, sets, shifted, t, x0s, x1s, xs, y0s, y1s, ys, yscale, _i, _len;
-      t = pairtable.getTable();
-      md = pairtable.getMD();
-      r = params.get('r');
-      t.setColumn('r', r);
-      yscale = md.get(0, 'scales').get('y', gg.data.Schema.numeric);
-      miny = yscale.range()[0];
-      cmp = function(r1, r2) {
-        return r1.get('x') - r2.get('x');
-      };
-      t = gg.data.Transform.sort(t, cmp);
-      xs = [];
-      ys = [];
-      prevx = null;
-      shifted = false;
-      t.fastEach(function(row) {
-        var curx;
-        curx = row.get('x');
-        if (!_.isValid(curx)) {
-          xs.push(curx);
-          ys.push(null);
-          return;
-        }
-        if (prevx === null || curx - prevx > r * 2) {
-          prevx = curx;
-          xs.push(prevx);
-          ys.push(r + miny);
-          return shifted = false;
-        } else if (curx !== prevx) {
-          xs.push(prevx + (r / 2.0));
-          if (shifted) {
-            return ys.push(ys[ys.length - 1] + r * 2);
-          } else {
-            ys.push(r + miny);
-            return shifted = true;
-          }
-        } else {
-          xs.push(curx);
-          ys.push(ys[ys.length - 1] + r * 2);
-          return shifted = false;
-        }
-      });
-      y0s = _.map(ys, function(y) {
-        return y - r;
-      });
-      y1s = _.map(ys, function(y) {
-        return y + r;
-      });
-      x0s = _.map(xs, function(x) {
-        return x - r;
-      });
-      x1s = _.map(xs, function(x) {
-        return x + r;
-      });
-      t = t.addColumn('x', xs, gg.data.Schema.numeric, true);
-      t = t.addColumn('x0', x0s, gg.data.Schema.numeric, true);
-      t = t.addColumn('x1', x1s, gg.data.Schema.numeric, true);
-      t = t.addColumn('y', ys, gg.data.Schema.numeric, true);
-      t = t.addColumn('y0', y0s, gg.data.Schema.numeric, true);
-      t = t.addColumn('y1', y1s, gg.data.Schema.numeric, true);
-      domain = [_.min(y0s), _.max(y1s)];
-      sets = _.uniq(pairtable.getMD().getColumn('scales'));
-      for (_i = 0, _len = sets.length; _i < _len; _i++) {
-        set = sets[_i];
-        s = set.get('y', gg.data.Schema.numeric);
-        s.domain(domain);
-        s.range([Math.max(domain[0], s.range()[0]), Math.min(domain[1], s.range()[1])]);
-        s.frozen = true;
-      }
-      return new gg.data.PairTable(t, pairtable.getMD());
-    };
-
-    return DotPlot;
-
-  })(gg.wf.SyncExec);
+  })(gg.pos.Position);
 
   gg.pos.Interpolate = (function(_super) {
 
@@ -21216,6 +19288,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Interpolate.prototype.defaults = function() {
       return {
+        group: "1",
         y0: 0,
         x0: 'x',
         x1: 'x'
@@ -21281,7 +19354,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     return Interpolate;
 
-  })(gg.core.XForm);
+  })(gg.pos.Position);
 
   gg.pos.Jitter = (function(_super) {
 
@@ -21317,39 +19390,35 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    Jitter.prototype.compute = function(pairtable, params) {
-      var Schema, map, md, scales, schema, table, xRange, xScale, yRange, yScale;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
+    Jitter.prototype.compute = function(data, params) {
+      var Schema, env, map, scales, schema, table, xRange, xScale, yRange, yScale;
+      table = data.table;
+      env = data.env;
+      scales = this.scales(data);
       schema = table.schema;
-      map = [];
+      map = {};
       Schema = gg.data.Schema;
       if (schema.type('x') === Schema.numeric) {
-        xRange = scales.scale("x", Schema.unknown).range();
+        xRange = scales.scale("x", Schema.numeric).range();
         xScale = (xRange[1] - xRange[0]) * params.get('xScale');
-        map.push([
-          'x', function(v) {
-            return v + (0.5 - Math.random()) * xScale;
-          }, Schema.numeric
-        ]);
+        map['x'] = function(v) {
+          return v + (0.5 - Math.random()) * xScale;
+        };
       }
       if (schema.type('y') === Schema.numeric) {
-        yRange = scales.scale("y", Schema.unknown).range();
+        yRange = scales.scale("y", Schema.numeric).range();
         yScale = (yRange[1] - yRange[0]) * params.get('yScale');
-        map.push([
-          'y', (function(v) {
-            return v + (0.5 - Math.random()) * yScale;
-          }), Schema.numeric
-        ]);
+        map['y'] = function(v) {
+          return v + (0.5 - Math.random()) * yScale;
+        };
       }
-      table = gg.data.Transform.mapCols(table, map);
-      return new gg.data.PairTable(table, md);
+      table.map(map);
+      return data;
     };
 
     return Jitter;
 
-  })(gg.core.XForm);
+  })(gg.pos.Position);
 
   gg.pos.Shift = (function(_super) {
 
@@ -21375,8 +19444,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    Shift.prototype.compute = function(pairtable, params) {
-      var map, table;
+    Shift.prototype.compute = function(data, params) {
+      var map,
+        _this = this;
       map = {
         x: function(v) {
           return v + params.get('xShift');
@@ -21385,38 +19455,30 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           return v + params.get('yShift');
         }
       };
-      map = _.map(map, function(f, k) {
-        return [k, f, gg.data.Schema.numeric];
-      });
-      table = pairtable.getTable();
-      table = gg.data.Transform.mapCols(table, map);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      data.table.map(map);
+      return data;
     };
 
     return Shift;
 
-  })(gg.core.XForm);
+  })(gg.pos.Position);
 
   gg.pos.Stack = (function(_super) {
 
     __extends(Stack, _super);
 
-    function Stack() {
-      return Stack.__super__.constructor.apply(this, arguments);
-    }
-
     Stack.ggpackage = "gg.pos.Stack";
 
     Stack.aliases = ["stack", "stacked"];
 
-    Stack.prototype.parseSpec = function() {
-      Stack.__super__.parseSpec.apply(this, arguments);
-      this.params.put('keys', ['facet-x', 'facet-y', 'layer']);
-      return this.params.put("padding", _.findGoodAttr(this.spec, ['pad', 'padding'], 0.05));
-    };
+    function Stack() {
+      Stack.__super__.constructor.apply(this, arguments);
+      this.log.level = gg.util.Log.DEBUG;
+    }
 
-    Stack.prototype.defaults = function() {
+    Stack.prototype.addDefaults = function() {
       return {
+        group: "1",
         y0: 0,
         y1: 'y',
         x0: 'x',
@@ -21428,48 +19490,130 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return ['x', 'y'];
     };
 
-    Stack.prototype.outputSchema = function(pairtable) {
-      var schema;
-      schema = pairtable.tableSchema();
-      gg.data.Schema.fromJSON({
-        group: schema.type("group"),
-        x: schema.type('x'),
-        y: schema.type('y'),
-        y0: schema.type('y'),
-        y1: schema.type('y')
+    Stack.prototype.outputSchema = function(data) {
+      var table;
+      table = data.table;
+      gg.data.Schema.fromSpec({
+        group: table.schema.typeObj("group"),
+        x: table.schema.type('x'),
+        y: table.schema.type('y'),
+        y0: table.schema.type('y'),
+        y1: table.schema.type('y')
       });
-      return schema.clone();
+      return table.schema.clone();
+    };
+
+    Stack.prototype.parseSpec = function() {
+      return Stack.__super__.parseSpec.apply(this, arguments);
     };
 
     Stack.prototype.baselines = function(table) {
       var baselines, xs, y0s;
       baselines = {};
       xs = table.getColumn('x');
-      if (table.has('y0')) {
-        y0s = table.getColumn('y0');
+      if (table.contains("y0")) {
+        y0s = table.getColumn("y0");
         _.times(xs.length, function(idx) {
           return baselines[xs[idx]] = y0s[idx];
         });
-        this.log("y0s: " + y0s.slice(0, 11));
       }
-      xs = _.uniq(xs);
+      xs = _.uniq(_.compact(xs));
       xs.sort(function(a, b) {
         return a - b;
       });
+      this.log("y0s: " + y0s.slice(0, 11));
       this.log("nxs: " + xs.length);
       return [baselines, xs];
     };
 
-    Stack.prototype.compute = function(pairtable, params) {
-      var baselines, groups, layers, newrows, schema, stack, stackedLayers, table, values, xs, _ref;
-      table = pairtable.getTable();
-      _ref = this.baselines(table), baselines = _ref[0], xs = _ref[1];
+    Stack.prototype.computeInArray = function(data, params) {
+      var arrKey, baselines, env, groups, layers, rettable, schema, stack, stackedLayers, table, values, xs, _ref, _ref1,
+        _this = this;
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+      arrKey = table.schema.attrToKeys['x'];
+      _ref1 = this.baselines(table), baselines = _ref1[0], xs = _ref1[1];
+      groups = table.split("group");
       layers = [];
-      groups = table.partition("group");
-      values = function(group, groupidx) {
+      values = function(group) {
         var rows, x2row;
         x2row = {};
-        group.fastEach(function(row) {
+        group.table.each(function(row) {
+          return row.flatten(null, true).each(function(subrow) {
+            return x2row[subrow.get('x')] = {
+              x: subrow.get('x'),
+              y: subrow.get('y1') - (subrow.get('y0') || 0),
+              y0: 0
+            };
+          });
+        });
+        rows = _.values(x2row);
+        rows.sort(function(a, b) {
+          return a.x - b.x;
+        });
+        rows = gg.pos.Interpolate.interpolate(xs, rows);
+        return rows;
+      };
+      layers = _.map(groups, values);
+      stack = d3.layout.stack();
+      stackedLayers = stack(layers);
+      schema = params.get('outputSchema')(data, params);
+      rettable = new gg.data.RowTable(schema);
+      _.times(groups.length, function(idx) {
+        var group, layer, rowData, rows, x2row;
+        group = groups[idx];
+        layer = stackedLayers[idx];
+        x2row = {};
+        group.table.each(function(row) {
+          var raw, _i, _len, _ref2, _results;
+          _ref2 = row.get(arrKey);
+          _results = [];
+          for (idx = _i = 0, _len = _ref2.length; _i < _len; idx = ++_i) {
+            raw = _ref2[idx];
+            _results.push(x2row[raw.x] = raw);
+          }
+          return _results;
+        });
+        console.log(layer);
+        rows = layer.map(function(pos) {
+          var row, x;
+          x = pos.x;
+          if (x in x2row) {
+            row = x2row[x];
+            row.y0 = pos.y0 + (baselines[x] || 0);
+            row.y1 = row.y0 + pos.y;
+            row.y = row.y1;
+          } else {
+            row = pos;
+            row.y0 += baselines[x] || 0;
+            row.y1 = row.y0 + row.y;
+          }
+          return row;
+        });
+        rowData = {
+          group: group.key
+        };
+        rowData[arrKey] = _.map(rows, function(row) {
+          var raw;
+          raw = row;
+          delete raw['group'];
+          return raw;
+        });
+        return rettable.addRow(rowData);
+      });
+      return rettable;
+    };
+
+    Stack.prototype.computeNormal = function(data, params) {
+      var baselines, env, groups, layers, rettable, schema, stack, stackedLayers, table, values, xs, _ref, _ref1,
+        _this = this;
+      _ref = [data.table, data.env], table = _ref[0], env = _ref[1];
+      _ref1 = this.baselines(table), baselines = _ref1[0], xs = _ref1[1];
+      groups = table.split("group");
+      layers = [];
+      values = function(group) {
+        var rows, x2row;
+        x2row = {};
+        group.table.each(function(row) {
           return x2row[row.get('x')] = {
             x: row.get('x'),
             y: row.get('y1') - (row.get('y0') || 0),
@@ -21492,12 +19636,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       layers = _.map(groups, values);
       stack = d3.layout.stack();
       stackedLayers = stack(layers);
-      newrows = [];
-      _.each(groups, function(group, idx) {
-        var layer, x2row;
+      schema = params.get('outputSchema')(data, params);
+      rettable = new gg.data.RowTable(schema);
+      _.times(groups.length, function(idx) {
+        var group, layer, x2row;
+        group = groups[idx];
         layer = stackedLayers[idx];
         x2row = {};
-        group.each(function(row) {
+        group.table.each(function(row) {
           return x2row[row.get('x')] = row;
         });
         return _.each(layer, function(pos) {
@@ -21508,19 +19654,35 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
             row.set('y0', pos.y0 + (baselines[x] || 0));
             row.set('y1', row.get('y0') + pos.y);
             row.set('y', row.get('y1'));
-            return newrows.push(row);
+            return rettable.addRow(row);
           }
         });
       });
-      schema = params.get('outputSchema')(pairtable, params);
-      table = gg.data.Table.fromArray(newrows);
-      gg.wf.Stdout.print(table, null, 5, this.log);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      return rettable;
+    };
+
+    Stack.prototype.compute = function(data, params) {
+      var env, inArray, rettable, table;
+      table = data.table;
+      env = data.env;
+      this.log.warn("nrows: " + (table.nrows()) + "\tschema: " + (table.colNames()));
+      this.log(table.get(0).raw());
+      inArray = table.schema.inArray('x');
+      if (inArray) {
+        rettable = this.computeInArray(data, params);
+      } else {
+        rettable = this.computeNormal(data, params);
+      }
+      this.log("input rows:   " + (table.nrows()));
+      this.log("output rows:  " + (rettable.nrows()));
+      gg.wf.Stdout.print(rettable, null, 5, this.log);
+      data.table = rettable;
+      return data;
     };
 
     return Stack;
 
-  })(gg.core.XForm);
+  })(gg.pos.Position);
 
   gg.pos.Text = (function(_super) {
 
@@ -21545,12 +19707,18 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return ['x', 'y', 'text'];
     };
 
-    Text.prototype.compute = function(pairtable, params) {
-      var Schema, attrs, bFast, boxes, innerLoop, md, start, table, temperature;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
+    Text.prototype.compute = function(data, params) {
+      var attrs, bFast, boxes, env, inArr, innerLoop, start, table, temperature;
+      table = data.table;
+      env = data.env;
       attrs = ['x', 'y', 'text'];
-      boxes = table.fastEach(function(row) {
+      inArr = _.map(attrs, (function(attr) {
+        return table.schema.inArray(attr);
+      }));
+      if (!(_.all(inArr) || !(_.any(inArr)))) {
+        throw Error("attributes must all be in arrays or all not");
+      }
+      boxes = table.each(function(row) {
         return [[row.get('x0'), row.get('x1')], [row.get('y0'), row.get('y1')], [row.get('x0'), row.get('y0')]];
       });
       start = Date.now();
@@ -21558,29 +19726,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       innerLoop = params.get('innerLoop');
       temperature = params.get('temperature');
       boxes = gg.pos.Text.anneal(boxes, bFast, innerLoop, temperature);
-      this.log.debug("got " + boxes.length + " boxes from annealing");
-      this.log.debug("took " + (Date.now() - start) + " ms");
-      Schema = gg.data.Schema;
-      table = gg.data.Transform.transform(table, [
-        [
-          'x0', (function(row, idx) {
-            return boxes[idx][0][0];
-          }), Schema.numeric
-        ], [
-          'x1', (function(row, idx) {
-            return boxes[idx][0][1];
-          }), Schema.numeric
-        ], [
-          'y0', (function(row, idx) {
-            return boxes[idx][1][0];
-          }), Schema.numeric
-        ], [
-          'y1', (function(row, idx) {
-            return boxes[idx][1][1];
-          }), Schema.numeric
-        ]
-      ]);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      console.log("got " + boxes.length + " boxes from annealing");
+      console.log("took " + (Date.now() - start) + " ms");
+      _.each(boxes, function(box, idx) {
+        var row;
+        row = table.get(idx);
+        row.set('x0', box[0][0]);
+        row.set('x1', box[0][1]);
+        row.set('y0', box[1][0]);
+        return row.set('y1', box[1][1]);
+      });
+      return data;
     };
 
     Text.anneal = function(boxes, bFast, innerLoop, T) {
@@ -21817,31 +19973,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     return Text;
 
-  })(gg.core.XForm);
-
-  gg.prov.BaseOp = {
-    pstores: function() {
-      return [];
-    },
-    inputshapes: function() {
-      return [];
-    },
-    fmap: function(id, path) {
-      return [id, path];
-    },
-    bmap: function(id, path) {
-      return [id, path];
-    },
-    pmap: function(payload, path) {
-      return null;
-    }
-  };
-
-  gg.prov.One2One = _.extend(gg.prov.BaseOp, {
-    pstores: function() {
-      return [];
-    }
-  });
+  })(gg.pos.Position);
 
   gg.prov.OPStore = (function(_super) {
 
@@ -21852,27 +19984,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.op = op;
       OPStore.__super__.constructor.apply(this, arguments);
       this.id(function(o) {
-        return JSON.stringify("" + this.flow.id + "-" + this.op.id);
+        return JSON.stringify(op);
       });
     }
 
-    OPStore.prototype.writeSchema = function(outAttrs, inAttrs) {
-      var inAttr, outAttr, _i, _len, _results;
-      _results = [];
-      for (_i = 0, _len = outAttrs.length; _i < _len; _i++) {
-        outAttr = outAttrs[_i];
-        _results.push((function() {
-          var _j, _len1, _results1;
-          _results1 = [];
-          for (_j = 0, _len1 = inAttrs.length; _j < _len1; _j++) {
-            inAttr = inAttrs[_j];
-            _results1.push(this.connect(outAttr, inAttr, "schema"));
-          }
-          return _results1;
-        }).call(this));
-      }
-      return _results;
-    };
+    OPStore.prototype.writeSchema = function() {};
 
     OPStore.prototype.writeData = function(outpath, inpath) {
       return this.connect(inpath, outpath, "data");
@@ -22109,15 +20225,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     };
 
     Config.prototype.addLayerDefaults = function(layer) {
-      var config, layerIdx, layerSpec, scalesSpec;
+      var layerConfig, layerIdx, layerSpec, scalesSpec;
       layerIdx = layer.layerIdx;
       layerSpec = layer.spec;
-      scalesSpec = layer.geom.scaleConfigs();
-      _.extend(scalesSpec, layerSpec.scales);
-      config = gg.scale.Config.loadSpec(scalesSpec);
-      this.layerDefaults[layerIdx] = config;
+      scalesSpec = layerSpec.scales;
+      layerConfig = gg.scale.Config.loadSpec(scalesSpec);
+      this.layerDefaults[layerIdx] = layerConfig;
       this.specs.layerSpecs[layerIdx] = layerSpec;
-      return this.log("addLayer: " + (JSON.stringify(scalesSpec)));
+      return this.log("addLayer: " + layerConfig);
     };
 
     Config.prototype.factoryFor = function(layerIdx) {
@@ -22215,87 +20330,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     return Identity;
 
   })(gg.scale.Scale);
-
-  gg.scale.MergedSet = (function() {
-
-    MergedSet.ggpackage = 'gg.scale.MergedSet';
-
-    function MergedSet(sets) {
-      if (sets == null) {
-        sets = [];
-      }
-      this.mapping = {};
-      this.setup(sets);
-    }
-
-    MergedSet.prototype.key = function(col, type, klassName) {
-      return JSON.stringify([col, String(type), klassName]);
-    };
-
-    MergedSet.prototype.setup = function(sets) {
-      var key, mapping, s, set, _i, _j, _len, _len1, _ref;
-      mapping = {};
-      for (_i = 0, _len = sets.length; _i < _len; _i++) {
-        set = sets[_i];
-        _ref = set.scalesList();
-        for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-          s = _ref[_j];
-          key = this.key(s.aes, s.type, s.constructor.name);
-          if (s != null) {
-            if (!(key in mapping)) {
-              mapping[key] = [];
-            }
-            mapping[key].push(s);
-          }
-        }
-      }
-      return this.mapping = _.o2map(mapping, function(ss, key) {
-        var other, _k, _len2, _ref1;
-        s = ss[0].clone();
-        _ref1 = _.rest(ss);
-        for (_k = 0, _len2 = _ref1.length; _k < _len2; _k++) {
-          other = _ref1[_k];
-          s.mergeDomain(other.domain());
-        }
-        return [key, s];
-      });
-    };
-
-    MergedSet.prototype.exclude = function(aess) {
-      var mapping, ret;
-      aess = _.flatten([aess]);
-      mapping = {};
-      _.each(this.mapping, function(v, key) {
-        var c, klassname, t, _ref;
-        _ref = JSON.parse(key), c = _ref[0], t = _ref[1], klassname = _ref[2];
-        if (__indexOf.call(aess, c) < 0) {
-          return mapping[key] = v;
-        }
-      });
-      ret = new gg.scale.MergedSet([]);
-      ret.mapping = mapping;
-      return ret;
-    };
-
-    MergedSet.prototype.contains = function(aes, type, klassName) {
-      return this.key(aes, type, klassName) in this.mapping;
-    };
-
-    MergedSet.prototype.get = function(aes, type, klassName) {
-      return this.mapping[this.key(aes, type, klassName)];
-    };
-
-    MergedSet.prototype.toString = function() {
-      var ss;
-      ss = _.map(this.mapping, function(s, k) {
-        return k + "\t->\t" + s.toString();
-      });
-      return ss.join('\n');
-    };
-
-    return MergedSet;
-
-  })();
 
   gg.scale.Linear = (function(_super) {
 
@@ -22431,11 +20465,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     Set.ggpackage = 'gg.scale.Set';
 
     function Set(factory) {
-      var _ref;
-      this.factory = factory != null ? factory : null;
-      if ((_ref = this.factory) == null) {
-        this.factory = new gg.scale.Factory;
-      }
+      this.factory = factory;
       this.scales = {};
       this.spec = {};
       this.id = gg.scale.Set.prototype._id;
@@ -22446,14 +20476,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     Set.prototype._id = 0;
 
     Set.prototype.clone = function() {
-      var ret, s, _i, _len, _ref;
+      var ret;
       ret = new gg.scale.Set(this.factory);
       ret.spec = _.clone(this.spec);
-      _ref = this.scalesList();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        s = _ref[_i];
-        ret.set(s.clone());
-      }
+      ret.merge(this, true);
       return ret;
     };
 
@@ -22474,6 +20500,16 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return set;
     };
 
+    Set.prototype.keep = function(aesthetics) {
+      var _this = this;
+      _.each(_.keys(this.scales), function(aes) {
+        if (__indexOf.call(aesthetics, aes) < 0) {
+          return delete _this.scales[aes];
+        }
+      });
+      return this;
+    };
+
     Set.prototype.exclude = function(aesthetics) {
       var _this = this;
       _.each(aesthetics, function(aes) {
@@ -22490,32 +20526,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return _.uniq(_.compact(_.flatten(keys)));
     };
 
-    Set.prototype.contains = function(aes, type, posMapping) {
+    Set.prototype.contains = function(aes, type) {
       if (type == null) {
         type = null;
       }
-      if (posMapping == null) {
-        posMapping = {};
-      }
-      aes = posMapping[aes] || aes;
-      if (aes in this.scales) {
-        if (type == null) {
-          return true;
-        }
-        if (!(_.size(this.scales[aes]) > 0)) {
-          if (type !== gg.data.Schema.unknown) {
-            return true;
-          }
-        }
-        if (type in this.scales[aes]) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    Set.prototype.has = function(aes, type, posMapping) {
-      return this.contains(aes, type, posMapping);
+      return aes in this.scales && (!type || type in this.scales[aes]);
     };
 
     Set.prototype.types = function(aes, posMapping) {
@@ -22525,38 +20540,16 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       }
       aes = posMapping[aes] || aes;
       if (aes in this.scales) {
-        types = _.keys(this.scales[aes]);
-        types = _.map(types, function(v) {
-          return parseInt(v);
+        types = _.map(this.scales[aes], function(v, k) {
+          return parseInt(k);
         });
         types.filter(function(t) {
-          return _.isNumber(t) && !_.isNaN(t);
+          return _.isNumber(t && !_.isNaN(t));
         });
         return types;
       } else {
         return [];
       }
-    };
-
-    Set.prototype.userdefinedType = function(aes) {
-      return this.factory.type(aes);
-    };
-
-    Set.prototype.getAll = function(aess, posMapping) {
-      var aes, ret, type, _i, _j, _len, _len1, _ref;
-      if (posMapping == null) {
-        posMapping = {};
-      }
-      ret = [];
-      for (_i = 0, _len = aess.length; _i < _len; _i++) {
-        aes = aess[_i];
-        _ref = this.types(aes, posMapping);
-        for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-          type = _ref[_j];
-          ret.push(this.get(aes, type));
-        }
-      }
-      return ret;
     };
 
     Set.prototype.scale = function(aesOrScale, type, posMapping) {
@@ -22586,17 +20579,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       return scale;
     };
 
-    Set.prototype.get = function(aes, types, posMapping) {
-      var t, type, udt, vals, _i, _len;
+    Set.prototype.get = function(aes, type, posMapping) {
+      var vals;
       if (posMapping == null) {
         posMapping = {};
       }
-      if (types == null) {
-        throw Error("type cannot be null: " + aes);
-      }
-      types = _.reject(_.flatten([types]), _.isNull);
-      if (!(types.length > 0)) {
-        throw Error("type cannot be empty: " + aes);
+      if (type == null) {
+        throw Error("type cannot be null anymore: " + aes);
       }
       if (__indexOf.call(gg.scale.Scale.xs, aes) >= 0) {
         aes = 'x';
@@ -22608,17 +20597,6 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (!(aes in this.scales)) {
         this.scales[aes] = {};
       }
-      type = null;
-      for (_i = 0, _len = types.length; _i < _len; _i++) {
-        t = types[_i];
-        if (this.has(aes, t)) {
-          type = t;
-          break;
-        }
-      }
-      if (type == null) {
-        type = _.last(types);
-      }
       if (type === gg.data.Schema.unknown) {
         vals = _.values(this.scales[aes]);
         if (vals.length > 0) {
@@ -22628,16 +20606,10 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           return this.set(this.factory.scale(aes, type));
         }
       } else {
-        udt = this.userdefinedType(aes);
-        if ((udt !== type) && (udt !== gg.data.Schema.unknown) && _.size(this.scales[aes]) > 0) {
-          this.log.warn("downcasting requested scale type from " + type + " -> " + (this.userdefinedType(aes)) + " because user defined");
-          return _.values(this.scales[aes])[0];
-        } else {
-          if (!(type in this.scales[aes])) {
-            this.scales[aes][type] = this.factory.scale(aes, type);
-          }
-          return this.scales[aes][type];
+        if (!(type in this.scales[aes])) {
+          this.scales[aes][type] = this.factory.scale(aes, type);
         }
+        return this.scales[aes][type];
       }
     };
 
@@ -22655,52 +20627,63 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    Set.prototype.merge = function(scales) {
-      var col, colscales, oldd, other, s, type, _ref;
-      _ref = this.scales;
-      for (col in _ref) {
-        colscales = _ref[col];
-        if (col === 'text') {
-          continue;
-        }
-        for (type in colscales) {
-          s = colscales[type];
-          if (!scales.contains(col, type, s.constructor.name)) {
-            continue;
-          }
-          if (_.isType(s, gg.scale.Identity)) {
-            continue;
-          }
-          other = scales.get(col, type, s.constructor.name);
-          oldd = s.domain();
-          s.mergeDomain(other.domain());
-          this.log("merge: " + s.domainUpdated + " " + col + "." + s.id + ":" + type + ": " + oldd + " + " + (other.domain()) + " -> " + (s.domain()));
-        }
+    Set.merge = function(scaleSets) {
+      var ret;
+      if (scaleSets.length === 0) {
+        return null;
       }
+      ret = scaleSets[0].clone();
+      _.each(_.rest(scaleSets), function(scales) {
+        return ret.merge(scales, true);
+      });
+      return ret;
+    };
+
+    Set.prototype.merge = function(scales, insert) {
+      var _this = this;
+      if (insert == null) {
+        insert = true;
+      }
+      _.each(scales.aesthetics(), function(aes) {
+        if (aes === 'text') {
+          return;
+        }
+        return _.each(scales.scales[aes], function(scale, type) {
+          var copy, mys, oldd;
+          if (_this.contains(aes, type)) {
+            mys = _this.scale(aes, type);
+            oldd = mys.domain();
+            mys.mergeDomain(scale.domain());
+            return _this.log("merge: " + mys.domainUpdated + " " + aes + "." + mys.id + ":" + type + ": " + oldd + " + " + (scale.domain()) + " -> " + (mys.domain()));
+          } else if (insert) {
+            copy = scale.clone();
+            _this.log("merge: " + aes + "." + copy.id + ":" + type + ": clone: " + copy.domainUpdated + "/" + scale.domainUpdated + ": " + (copy.toString()));
+            return _this.scale(copy, type);
+          } else {
+            return _this.log("merge notfound + dropping scale: " + (scale.toString()));
+          }
+        });
+      });
       return this;
     };
 
     Set.prototype.useScales = function(table, posMapping, f) {
-      var col, scale, tabletype, truecol, unknown, _i, _len, _ref;
+      var _this = this;
       if (posMapping == null) {
         posMapping = {};
       }
-      _ref = table.cols();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        if (this.contains(col, null, posMapping)) {
-          truecol = posMapping[col] || col;
-          tabletype = table.schema.type(col);
-          unknown = gg.data.Schema.unknown;
-          scale = this.scale(col, [tabletype, unknown], posMapping);
+      _.each(table.colNames(), function(aes) {
+        var scale, tabletype;
+        if (_this.contains(posMapping[aes] || aes)) {
+          scale = _this.scale(aes, gg.data.Schema.unknown, posMapping);
         } else {
-          tabletype = table.schema.type(col);
-          this.log("scaleset doesn't contain " + col + " creating using type " + tabletype);
-          scale = this.scale(col, tabletype, posMapping);
+          tabletype = table.schema.type(aes);
+          _this.log("scaleset doesn't contain " + aes + " creating using type " + tabletype);
+          scale = _this.scale(aes, tabletype, posMapping);
         }
-        this.log(scale.toString());
-        table = f(table, scale, col);
-      }
+        _this.log(scale);
+        return f(table, scale, aes);
+      });
       return table;
     };
 
@@ -22710,31 +20693,29 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (posMapping == null) {
         posMapping = {};
       }
-      f = function(table, scale, col) {
-        var colData, maxval, minval, newDomain, oldDomain;
-        if (!table.has(col)) {
-          _this.log("col " + col + " not in table");
-          return table;
+      f = function(table, scale, aes) {
+        var col, newDomain, oldDomain;
+        if (!table.contains(aes)) {
+          return;
         }
         if (_.isSubclass(scale, gg.scale.Identity)) {
-          _this.log("scale is identity.");
-          return table;
+          return;
         }
-        colData = table.getColumn(col);
-        if (colData == null) {
-          throw Error("Set.train: attr " + col + " does not exist in table");
+        col = table.getColumn(aes);
+        if (col == null) {
+          console.log("aes: " + aes);
+          console.log(table);
+          throw Error("Set.train: attr " + aes + " does not exist in table");
         }
-        colData = colData.filter(_.isValid);
-        if (colData.length < table.nrows()) {
-          _this.log("filtered out " + (table.nrows() - colData.length) + " col values");
+        col = col.filter(_.isValid);
+        if (col.length < table.nrows()) {
+          _this.log("filtered out " + (table.nrows() - col.length) + " col values");
         }
-        _this.log("col " + col + " has " + colData.length + " elements");
-        if ((colData != null) && colData.length > 0) {
-          newDomain = scale.defaultDomain(colData);
+        _this.log("col " + aes + " has " + col.length + " elements");
+        if ((col != null) && col.length > 0) {
+          newDomain = scale.defaultDomain(col);
           oldDomain = scale.domain();
-          minval = _.mmin([oldDomain[0], newDomain[0]]);
-          maxval = _.mmax([oldDomain[1], newDomain[1]]);
-          _this.log("domains: " + (scale.toString()) + " " + oldDomain + " + " + newDomain + " = [" + minval + ", " + maxval + "]");
+          _this.log("domains: " + scale.type + " " + scale.constructor.name + " " + oldDomain + " + " + newDomain + " = [" + (_.mmin([oldDomain[0], newDomain[0]])) + ", " + (_.mmax([oldDomain[1], newDomain[1]])) + "]");
           if (newDomain == null) {
             throw Error();
           }
@@ -22743,12 +20724,11 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           }
           scale.mergeDomain(newDomain);
           if (scale.type === gg.data.Schema.numeric) {
-            _this.log("train: " + col + "(" + scale.id + ")\t" + oldDomain + " merged with " + newDomain + " to " + (scale.domain()));
+            return _this.log("train: " + aes + "(" + scale.id + ")\t" + oldDomain + " merged with " + newDomain + " to " + (scale.domain()));
           } else {
-            _this.log("train: " + col + "(" + scale.id + ")\t" + scale);
+            return _this.log("train: " + aes + "(" + scale.id + ")\t" + scale);
           }
         }
-        return table;
       };
       this.useScales(table, posMapping, f);
       return this;
@@ -22760,23 +20740,20 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (posMapping == null) {
         posMapping = {};
       }
-      f = function(table, scale, col) {
-        var mapping, str;
+      f = function(table, scale, aes) {
+        var g, str;
         str = scale.toString();
-        mapping = [];
-        mapping.push([
-          col, (function(v) {
-            return scale.scale(v);
-          }), gg.data.Schema.unknown
-        ]);
-        if (table.has(col)) {
-          table = gg.data.Transform.mapCols(table, mapping);
+        g = function(v) {
+          return scale.scale(v);
+        };
+        if (table.contains(aes)) {
+          table.map(g, aes);
         }
-        _this.log("apply: " + col + "(" + scale.id + "):\t" + str + "\t" + (table.nrows()) + " rows");
-        return table;
+        return _this.log("apply: " + aes + "(" + scale.id + "):\t" + str + "\t" + (table.nrows()) + " rows");
       };
+      table = table.clone();
       this.log("apply: table has " + (table.nrows()) + " rows");
-      table = this.useScales(table, posMapping, f);
+      this.useScales(table, posMapping, f);
       return table;
     };
 
@@ -22787,26 +20764,16 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         posMapping = {};
       }
       filterFuncs = [];
-      f = function(table, scale, col) {
+      f = function(table, scale, aes) {
         var g;
         g = function(row) {
-          var checks, v;
-          v = row.get(col);
-          checks = [_.isNaN, _.isUndefined, _.isNull];
-          if (!_.any(checks, function(f) {
-            return f(v);
-          })) {
-            return scale.valid(v);
-          } else {
-            return true;
-          }
+          return scale.valid(row.get(aes));
         };
-        g.col = col;
+        g.aes = aes;
         _this.log("filter: " + (scale.toString()));
-        if (table.has(col)) {
-          filterFuncs.push(g);
+        if (table.contains(aes)) {
+          return filterFuncs.push(g);
         }
-        return table;
       };
       this.useScales(table, posMapping, f);
       nRejected = 0;
@@ -22816,13 +20783,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
           f = filterFuncs[_i];
           if (!f(row)) {
             nRejected += 1;
-            _this.log("Row rejected on attr " + f.col + " w val: " + (row.get(f.col)));
+            _this.log("Row rejected on attr " + f.aes + " w val: " + (row.get(f.aes)));
             return false;
           }
         }
         return true;
       };
-      table = gg.data.Transform.filter(table, g);
+      table = table.filter(g);
       this.log("filter: removed " + nRejected + ".  " + (table.nrows()) + " rows left");
       return table;
     };
@@ -22833,31 +20800,27 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (posMapping == null) {
         posMapping = {};
       }
-      f = function(table, scale, col) {
-        var mapping, newDomain, origDomain;
-        mapping = [
-          [
-            col, function(v) {
-              if (v != null) {
-                return scale.invert(v);
-              } else {
-                return null;
-              }
-            }, gg.data.Schema.unknown
-          ]
-        ];
-        origDomain = scale.defaultDomain(table.getColumn(col));
+      f = function(table, scale, aes) {
+        var g, newDomain, origDomain;
+        g = function(v) {
+          if (v != null) {
+            return scale.invert(v);
+          } else {
+            return null;
+          }
+        };
+        origDomain = scale.defaultDomain(table.getColumn(aes));
         newDomain = null;
-        if (table.has(col)) {
-          table = gg.data.Transform.mapCols(table, mapping);
-          newDomain = scale.defaultDomain(table.getColumn(col));
+        if (table.contains(aes)) {
+          table.map(g, aes);
+          newDomain = scale.defaultDomain(table.getColumn(aes));
         }
         if (scale.domain() != null) {
-          _this.log("invert: " + col + "(" + scale.id + ";" + (scale.domain()) + "):\t" + origDomain + " --> " + newDomain);
+          return _this.log("invert: " + aes + "(" + scale.id + ";" + (scale.domain()) + "):\t" + origDomain + " --> " + newDomain);
         }
-        return table;
       };
-      table = this.useScales(table, posMapping, f);
+      table = table.clone();
+      this.useScales(table, posMapping, f);
       return table;
     };
 
@@ -22871,9 +20834,9 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       if (prefix == null) {
         prefix = "";
       }
-      arr = _.flatten(_.map(this.scales, function(map, col) {
+      arr = _.flatten(_.map(this.scales, function(map, aes) {
         return _.map(map, function(scale, type) {
-          return "" + prefix + col + ": " + (scale.toString());
+          return "" + prefix + aes + ": " + (scale.toString());
         });
       }));
       return arr.join('\n');
@@ -22970,135 +20933,195 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
   })(gg.scale.Scale);
 
-  gg.stat.Bin1D = (function(_super) {
+  gg.stat.Bin1DStat = (function(_super) {
 
-    __extends(Bin1D, _super);
+    __extends(Bin1DStat, _super);
 
-    function Bin1D() {
-      return Bin1D.__super__.constructor.apply(this, arguments);
+    function Bin1DStat() {
+      return Bin1DStat.__super__.constructor.apply(this, arguments);
     }
 
-    Bin1D.ggpackage = "gg.stat.Bin1D";
+    Bin1DStat.ggpackage = "gg.stat.Bin1DStat";
 
-    Bin1D.aliases = ['1dbin', 'bin', 'bin1d'];
+    Bin1DStat.aliases = ['1dbin', 'bin', 'bin1d'];
 
-    Bin1D.prototype.parseSpec = function() {
-      var defaults, params;
-      defaults = {
-        gbAttrs: ['x'],
-        aggFuncs: {
-          count: 'count',
-          sum: 'sum',
-          y: 'sum',
-          total: 'sum',
-          avg: 'avg'
-        }
+    Bin1DStat.prototype.parseSpec = function() {
+      Bin1DStat.__super__.parseSpec.apply(this, arguments);
+      return this.params.put('nbins', _.findGoodAttr(this.spec, ["n", "bins", "bins"], 30));
+    };
+
+    Bin1DStat.prototype.inputSchema = function(data, params) {
+      return ['x'];
+    };
+
+    Bin1DStat.prototype.outputSchema = function(data, params) {
+      var table;
+      table = data.table;
+      return gg.data.Schema.fromSpec({
+        x: table.schema.type('x'),
+        bin: table.schema.type('x'),
+        y: gg.data.Schema.numeric,
+        count: gg.data.Schema.numeric,
+        total: gg.data.Schema.numeric
+      });
+    };
+
+    Bin1DStat.prototype.schemaMapping = function(data, params) {
+      return {
+        x: 'x',
+        bin: 'x',
+        y: 'y',
+        count: 'y',
+        total: 'y'
       };
-      params = new gg.util.Params(this.spec);
-      params.merge(new gg.util.Params(defaults));
-      params.merge(this.params);
-      this.params = params;
-      this.params.ensure('nBins', ['n', 'bins', 'nbins'], 20);
-      return Bin1D.__super__.parseSpec.apply(this, arguments);
     };
 
-    return Bin1D;
-
-  })(gg.xform.GroupBy);
-
-  gg.stat.Bin2D = (function(_super) {
-
-    __extends(Bin2D, _super);
-
-    function Bin2D() {
-      return Bin2D.__super__.constructor.apply(this, arguments);
-    }
-
-    Bin2D.ggpackage = "gg.stat.Bin2D";
-
-    Bin2D.aliases = ['2dbin', 'bin2d'];
-
-    Bin2D.prototype.parseSpec = function() {
-      var defaults, params;
-      defaults = {
-        nBins: 20,
-        gbAttrs: ['x', 'y'],
-        aggFuncs: {
-          count: {
-            type: 'count',
-            arg: 'z'
-          },
-          sum: {
-            type: 'sum',
-            arg: 'z'
-          },
-          r: {
-            type: 'count',
-            arg: 'z'
-          },
-          total: {
-            type: 'sum',
-            arg: 'z'
-          }
+    Bin1DStat.prototype.compute = function(data, params) {
+      var binRange, binSize, domain, env, nBins, nbins, scales, schema, stats, table, toBinidx, xScale, xType, xtoidx,
+        _this = this;
+      table = data.table;
+      env = data.env;
+      scales = this.scales(data, params);
+      xType = table.schema.type('x');
+      xScale = scales.scale('x', xType);
+      domain = xScale.domain();
+      switch (xType) {
+        case gg.data.Schema.ordinal:
+          xtoidx = _.o2map(domain, function(x, idx) {
+            return [x, idx];
+          });
+          toBinidx = function(x) {
+            return xtoidx[x];
+          };
+          stats = _.map(domain, function(x) {
+            return {
+              bin: x,
+              count: 0,
+              total: 0
+            };
+          });
+          break;
+        case gg.data.Schema.numeric:
+          binRange = domain[1] - domain[0];
+          nbins = params.get('nbins');
+          binSize = Math.ceil(binRange / nbins);
+          nBins = Math.ceil(binRange / binSize) + 1;
+          this.log("nbins: " + nbins + "\tscaleid: " + xScale.id + "\tscaledomain: " + (xScale.domain()) + "\tdomain: " + domain + "\tbinSize: " + binSize);
+          toBinidx = function(x) {
+            return Math.floor((x - domain[0]) / binSize);
+          };
+          stats = _.times(nBins, function(binidx) {
+            return {
+              bin: (binidx * binSize) + domain[0] + binSize / 2,
+              count: 0,
+              total: 0
+            };
+          });
+          break;
+        case gg.data.Schema.date:
+          domain = [domain[0].getTime(), domain[1].getTime()];
+          binRange = domain[1] - domain[0];
+          nbins = params.get('nbins');
+          binSize = Math.ceil(binRange / nbins);
+          nBins = Math.ceil(binRange / binSize) + 1;
+          this.log("nbins: " + nbins + "\tscaleid: " + xScale.id + "\tscaledomain: " + (xScale.domain()) + "\tdomain: " + domain + "\tbinSize: " + binSize);
+          toBinidx = function(x) {
+            return Math.floor((x.getTime() - domain[0]) / binSize);
+          };
+          stats = _.times(nBins, function(binidx) {
+            var date;
+            date = (binidx * binSize) + domain[0] + binSize / 2;
+            date = new Date(date);
+            return {
+              bin: date,
+              count: 0,
+              total: 0
+            };
+          });
+          break;
+        default:
+          throw Error("I don't support binning on col type: " + xType);
+      }
+      table.each(function(row) {
+        var binidx, x, y;
+        x = row.get('x');
+        y = row.get('y') || 0;
+        binidx = toBinidx(x);
+        try {
+          stats[binidx].count += 1;
+        } catch (error) {
+          _this.log.warn("Bin1D.compute: " + error);
+          _this.log.warn("fetch bin: val(" + x + "):  " + binidx + " of " + stats.length);
+          return;
         }
-      };
-      params = new gg.util.Params(this.spec);
-      params.merge(new gg.util.Params(defaults));
-      params.merge(this.params);
-      this.params = params;
-      return Bin2D.__super__.parseSpec.apply(this, arguments);
+        if (_.isNumber(y)) {
+          return stats[binidx].total += y;
+        } else {
+          return stats[binidx].total += 1;
+        }
+      });
+      _.each(stats, function(stat) {
+        stat.sum = stat.total;
+        stat.x = stat.bin;
+        return stat.y = stat.total;
+      });
+      schema = params.get('outputSchema')(data, params);
+      this.log(_.map(stats, function(s) {
+        return s.x;
+      }));
+      data.table = new gg.data.RowTable(schema, stats);
+      return data;
     };
 
-    return Bin2D;
+    return Bin1DStat;
 
-  })(gg.xform.GroupBy);
+  })(gg.stat.Stat);
 
-  gg.stat.Boxplot = (function(_super) {
+  gg.stat.BoxplotStat = (function(_super) {
 
-    __extends(Boxplot, _super);
+    __extends(BoxplotStat, _super);
 
-    function Boxplot() {
-      return Boxplot.__super__.constructor.apply(this, arguments);
+    function BoxplotStat() {
+      return BoxplotStat.__super__.constructor.apply(this, arguments);
     }
 
-    Boxplot.ggpackage = "gg.stat.Boxplot";
+    BoxplotStat.ggpackage = "gg.stat.BoxplotStat";
 
-    Boxplot.aliases = ['boxplot', 'quantile'];
+    BoxplotStat.aliases = ['boxplot', 'quantile'];
 
-    Boxplot.prototype.parseSpec = function() {
-      this.params.put('gbAttrs', 'x');
-      this.params.put('nBins', -1);
-      return Boxplot.__super__.parseSpec.apply(this, arguments);
-    };
-
-    Boxplot.prototype.defaults = function() {
+    BoxplotStat.prototype.defaults = function() {
       return {
         x: 0
       };
     };
 
-    Boxplot.prototype.inputSchema = function() {
+    BoxplotStat.prototype.inputSchema = function() {
       return ['x', 'y'];
     };
 
-    Boxplot.prototype.outputSchema = function(pairtable) {
-      var Schema, newschema, schema;
-      Schema = gg.data.Schema;
-      schema = pairtable.tableSchema().clone();
-      newschema = Schema.fromJSON({
-        q1: Schema.numeric,
-        q3: Schema.numeric,
-        median: Schema.numeric,
-        lower: Schema.numeric,
-        upper: Schema.numeric,
-        outlier: Schema.numeric,
-        min: Schema.numeric,
-        max: Schema.numeric
+    BoxplotStat.prototype.outputSchema = function(data) {
+      var env, table;
+      table = data.table;
+      env = data.env;
+      return gg.data.Schema.fromSpec({
+        x: table.schema.type('x'),
+        q1: gg.data.Schema.numeric,
+        q3: gg.data.Schema.numeric,
+        median: gg.data.Schema.numeric,
+        lower: gg.data.Schema.numeric,
+        upper: gg.data.Schema.numeric,
+        outliers: {
+          type: gg.data.Schema.array,
+          schema: {
+            outlier: gg.data.Schema.numeric
+          }
+        },
+        min: gg.data.Schema.numeric,
+        max: gg.data.Schema.numeric
       });
-      return schema.merge(newschema);
     };
 
-    Boxplot.prototype.schemaMapping = function() {
+    BoxplotStat.prototype.schemaMapping = function(data, params) {
       return {
         x: 'x',
         q1: 'y',
@@ -23112,10 +21135,8 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       };
     };
 
-    Boxplot.prototype.udf = function(table, params) {
-      var boxstats, fr, lower, lowerIdx, max, median, min, outliers, q1, q3, rows, upper, upperIdx, vals, x;
-      x = table.get(0, 'x');
-      vals = table.getColumn('y');
+    BoxplotStat.prototype.computeStatistics = function(vals) {
+      var fr, lower, lowerIdx, max, median, min, outliers, q1, q3, upper, upperIdx;
       vals.sort(d3.ascending);
       q1 = d3.quantile(vals, 0.25);
       median = d3.quantile(vals, 0.5);
@@ -23128,173 +21149,116 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       lower = vals[lowerIdx];
       upper = vals[upperIdx];
       outliers = vals.slice(0, lowerIdx).concat(vals.slice(upperIdx + 1));
-      if (!(outliers.length > 0)) {
-        outliers = [null];
-      }
-      boxstats = {
+      outliers = _.map(outliers, function(v) {
+        return {
+          outlier: v
+        };
+      });
+      return {
         q1: q1,
         median: median,
         q3: q3,
         lower: lower,
         upper: upper,
+        outliers: outliers,
         min: min,
-        max: max,
-        x: x
-      };
-      this.log("boxstats: " + (JSON.stringify(boxstats)));
-      rows = _.map(outliers, function(v) {
-        var newrow;
-        newrow = table.get(0).raw();
-        _.extend(newrow, boxstats);
-        return newrow;
-      });
-      return rows;
-    };
-
-    return Boxplot;
-
-  })(gg.xform.GroupBy);
-
-  gg.stat.CDF = (function(_super) {
-
-    __extends(CDF, _super);
-
-    function CDF() {
-      return CDF.__super__.constructor.apply(this, arguments);
-    }
-
-    CDF.ggpackage = "gg.stat.CDF";
-
-    CDF.aliases = ['cdf', 'cumulative'];
-
-    CDF.prototype.inputSchema = function(data, params) {
-      return ['x', 'y'];
-    };
-
-    CDF.prototype.outputSchema = function(pairtable, params) {
-      var newschema, schema;
-      schema = pairtable.tableSchema();
-      newschema = gg.data.Schema.fromJSON({
-        x: schema.type('x'),
-        y: gg.data.Schema.numeric,
-        perc: gg.data.Schema.numeric,
-        total: gg.data.Schema.numeric
-      });
-      return schema.merge(newschema);
-    };
-
-    CDF.prototype.schemaMapping = function() {
-      return {
-        x: 'x',
-        y: 'y',
-        perc: 'y',
-        total: 'y'
+        max: max
       };
     };
 
-    CDF.prototype.compute = function(pairtable, params) {
-      var cum, row, rows, table, _i, _len,
+    BoxplotStat.prototype.compute = function(data, params) {
+      var env, groups, rows, schema, table,
         _this = this;
-      table = pairtable.getTable();
-      cum = 0;
-      rows = table.fastEach(function(row, idx) {
-        var raw, x, y, yp;
-        raw = row.raw();
-        x = raw.x;
-        y = raw.y || 0;
-        if (y < 0 && false) {
-          throw Error("y values for CDF should not be negative");
-        }
-        cum += y;
-        yp = cum;
-        raw.y = yp;
-        raw.total = yp;
-        raw.perc = 0.0;
-        return raw;
+      table = data.table;
+      env = data.env;
+      groups = table.split("x");
+      rows = _.map(groups, function(groupPair) {
+        var gKey, gTable, row, vals;
+        gTable = groupPair.table;
+        gKey = groupPair.key;
+        vals = gTable.getColumn("y");
+        row = _this.computeStatistics(vals);
+        row.x = gKey;
+        return row;
       });
-      this.log("cumulative value: " + cum);
-      if (cum !== 0) {
-        for (_i = 0, _len = rows.length; _i < _len; _i++) {
-          row = rows[_i];
-          row.perc = row.y / cum;
-        }
-      }
-      table = gg.data.Table.fromArray(rows, this.outputSchema(pairtable, params));
-      return new gg.data.PairTable(table, pairtable.getMD());
+      schema = params.get('outputSchema')(data, params);
+      data.table = new gg.data.RowTable(schema, rows);
+      return data;
     };
 
-    return CDF;
+    return BoxplotStat;
 
   })(gg.stat.Stat);
 
-  gg.stat.Identity = (function(_super) {
+  gg.stat.IdentityStat = (function(_super) {
 
-    __extends(Identity, _super);
+    __extends(IdentityStat, _super);
 
-    function Identity() {
-      return Identity.__super__.constructor.apply(this, arguments);
+    function IdentityStat() {
+      return IdentityStat.__super__.constructor.apply(this, arguments);
     }
 
-    Identity.ggpackage = "gg.stat.Identity";
+    IdentityStat.ggpackage = "gg.stat.IdentityStat";
 
-    Identity.aliases = ['identity'];
+    IdentityStat.aliases = ['identity'];
 
-    Identity.prototype.compile = function() {
+    IdentityStat.prototype.compile = function() {
       return [];
     };
 
-    return Identity;
+    return IdentityStat;
 
   })(gg.stat.Stat);
 
   science = require('science');
 
-  gg.stat.Loess = (function(_super) {
+  gg.stat.LoessStat = (function(_super) {
 
-    __extends(Loess, _super);
+    __extends(LoessStat, _super);
 
-    function Loess() {
-      return Loess.__super__.constructor.apply(this, arguments);
+    function LoessStat() {
+      return LoessStat.__super__.constructor.apply(this, arguments);
     }
 
-    Loess.ggpackage = "gg.stat.Loess";
+    LoessStat.ggpackage = "gg.stat.LoessStat";
 
-    Loess.aliases = ['loess', 'smooth'];
+    LoessStat.aliases = ['loess', 'smooth'];
 
-    Loess.prototype.parseSpec = function() {
-      Loess.__super__.parseSpec.apply(this, arguments);
+    LoessStat.prototype.parseSpec = function() {
+      LoessStat.__super__.parseSpec.apply(this, arguments);
       return this.params.ensureAll({
         bandwidth: [["band", "bw"], .3],
         acc: [["accuracy", "ac"], 1e-12]
       });
     };
 
-    Loess.prototype.inputSchema = function() {
+    LoessStat.prototype.inputSchema = function() {
       return ['x', 'y'];
     };
 
-    Loess.prototype.outputSchema = function() {
-      return gg.data.Schema.fromJSON({
+    LoessStat.prototype.outputSchema = function(data) {
+      return gg.data.Schema.fromSpec({
         x: gg.data.Schema.numeric,
         y: gg.data.Schema.numeric
       });
     };
 
-    Loess.prototype.schemaMapping = function() {
+    LoessStat.prototype.schemaMapping = function(data) {
       return {
         x: 'x',
         y: 'y'
       };
     };
 
-    Loess.prototype.compute = function(pairtable, params) {
-      var acc, bandwidth, loessfunc, prototyperow, rows, smoothys, table, xs, xys, ys;
-      table = pairtable.getTable();
+    LoessStat.prototype.compute = function(data, params) {
+      var acc, bandwidth, env, loessfunc, rows, schema, smoothys, table, xs, xys, ys;
+      table = data.table;
+      env = data.env;
       if (table.nrows() <= 1) {
-        return pairtable;
+        return data;
       }
-      this.log("nrows:   " + (table.nrows()));
-      this.log("schema:  " + (table.schema.toString()));
+      this.log("nrows: " + (table.nrows()));
+      this.log("contains x,y: " + (table.contains('x')) + ", " + (table.contains('y')));
       xs = table.getColumn('x');
       ys = table.getColumn('y');
       xys = _.zip(xs, ys);
@@ -23311,6 +21275,7 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
         return xy[1];
       });
       this.log(params);
+      console.log(params);
       this.log("precompute: ys: " + (JSON.stringify(ys.slice(0, 6))));
       loessfunc = science.stats.loess();
       acc = params.get('acc');
@@ -23321,46 +21286,43 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       this.log("nxs: " + xs.length + "\tnys: " + ys.length);
       this.log.warn("bw: " + bandwidth + "\tacc: " + acc);
       smoothys = loessfunc(xs, ys);
-      prototyperow = table.get(0).raw();
-      rows = _.compact(_.map(_.zip(xs, smoothys), function(_arg) {
-        var newrow, x, y;
-        x = _arg[0], y = _arg[1];
-        if (_.isValid(y) && _.isValid(x)) {
-          newrow = _.clone(prototyperow);
-          _.extend(newrow, {
-            x: x,
-            y: y
+      this.log("" + (_.reject(smoothys, _.isValid).length) + " ys rejected post-loess");
+      rows = [];
+      _.times(xs.length, function(idx) {
+        if (_.isValid(smoothys[idx]) && _.isValid(xs[idx])) {
+          return rows.push({
+            x: xs[idx],
+            y: smoothys[idx]
           });
-          return newrow;
         }
-      }));
-      this.log("" + (smoothys.length - rows.length) + " rejected post-loess");
+      });
       this.log("compute: xs: " + (JSON.stringify(xs.slice(0, 6))));
       this.log("compute: ys: " + (JSON.stringify(ys.slice(0, 6))));
       this.log("compute: smoothys: " + (JSON.stringify(smoothys.slice(0, 6))));
-      table = gg.data.Table.fromArray(rows);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      schema = params.get('outputSchema')(data, params);
+      data.table = new gg.data.RowTable(schema, rows);
+      return data;
     };
 
-    return Loess;
+    return LoessStat;
 
   })(gg.stat.Stat);
 
-  gg.stat.Sort = (function(_super) {
+  gg.stat.SortStat = (function(_super) {
 
-    __extends(Sort, _super);
+    __extends(SortStat, _super);
 
-    function Sort() {
-      return Sort.__super__.constructor.apply(this, arguments);
+    function SortStat() {
+      return SortStat.__super__.constructor.apply(this, arguments);
     }
 
-    Sort.ggpackage = "gg.stat.Sort";
+    SortStat.ggpackage = "gg.stat.SortStat";
 
-    Sort.aliases = ['sort', 'sorted'];
+    SortStat.aliases = ['sort', 'sorted'];
 
-    Sort.prototype.parseSpec = function() {
+    SortStat.prototype.parseSpec = function() {
       var attrs, reverse;
-      Sort.__super__.parseSpec.apply(this, arguments);
+      SortStat.__super__.parseSpec.apply(this, arguments);
       attrs = ["col", "cols", "attr", "attrs", "aes", "aess"];
       attrs = _.findGoodAttr(this.spec, attrs, []);
       if (!_.isArray(attrs)) {
@@ -23373,324 +21335,49 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    Sort.prototype.inputSchema = function(pairtable, params) {
+    SortStat.prototype.inputSchema = function(data, params) {
       return params.get('attrs');
     };
 
-    Sort.prototype.compute = function(pairtable, params) {
-      var attrs, cmp, raws, reverse, table;
-      table = pairtable.getTable();
-      reverse = params.get('reverse');
+    SortStat.prototype.compute = function(data, params) {
+      var attrs, cmp, env, f, reverse, table;
+      table = data.table;
+      env = data.env;
+      f = function(attr) {
+        return table.contains(attr) && !table.schema.inArray(attr);
+      };
       attrs = params.get('attrs');
-      attrs = attrs.filter(function(attr) {
-        return table.has(attr);
-      });
-      reverse = reverse ? -1 : 1;
+      attrs = attrs.filter(f);
+      reverse = params.get('reverse');
       if (attrs.length > 0) {
         cmp = function(row1, row2) {
-          var attr, v1, v2, _i, _len;
+          var attr, _i, _len;
           for (_i = 0, _len = attrs.length; _i < _len; _i++) {
             attr = attrs[_i];
-            v1 = row1[attr];
-            v2 = row2[attr];
-            if (!((v1 != null) && (v2 != null))) {
-              if (v1 != null) {
-                return -1 * reverse;
+            if (row1.get(attr) > row2.get(attr)) {
+              if (reverse) {
+                return -1;
               } else {
-                return 1 * reverse;
+                return 1;
               }
-            }
-            if (v1 > v2) {
-              return 1 * reverse;
-            } else if (v1 < v2) {
-              return -1 * reverse;
+            } else if (row1.get(attr) < row2.get(attr)) {
+              if (reverse) {
+                return 1;
+              } else {
+                return -1;
+              }
             }
           }
           return 0;
         };
-        raws = table.raw();
-        raws.sort(cmp);
+        table.sort(cmp);
       }
-      table = gg.data.Table.fromArray(raws);
-      return new gg.data.PairTable(table, pairtable.getMD());
+      return data;
     };
 
-    return Sort;
+    return SortStat;
 
   })(gg.stat.Stat);
-
-  gg.xform.Aggregate = (function() {
-
-    Aggregate.ggpackage = "gg.xform.Aggregate";
-
-    function Aggregate(spec) {
-      this.spec = spec;
-      this.type = gg.data.Schema.numeric;
-      this.args = this.spec.args;
-      this.params = new gg.util.Params(this.spec.params);
-      this.log = gg.util.Log.logger(this.constructor.ggpackage, "Agg");
-    }
-
-    Aggregate.prototype.reset = function() {};
-
-    Aggregate.prototype.update = function(row) {
-      throw Error("update not implemented");
-    };
-
-    Aggregate.prototype.value = function() {
-      return null;
-    };
-
-    Aggregate.prototype.compute = function(table) {
-      var _this = this;
-      this.reset();
-      table.fastEach(function(row) {
-        return _this.update(row);
-      });
-      return this.value();
-    };
-
-    Aggregate.fromSpec = function(spec) {
-      var args, klass, params, type;
-      if (_.isString(spec)) {
-        spec = {
-          type: spec
-        };
-      }
-      type = spec.type;
-      args = spec.arg || spec.args || 'y';
-      args = _.flatten([args]);
-      params = spec.params || {};
-      klass = {
-        count: gg.xform.Count,
-        sum: gg.xform.Sum,
-        avg: gg.xform.Avg,
-        quantile: gg.xform.Quantile,
-        min: gg.xform.Min,
-        max: gg.xform.Max
-      }[type] || gg.xform.Count;
-      spec = {
-        type: type,
-        args: args,
-        params: params
-      };
-      return new klass(spec);
-    };
-
-    return Aggregate;
-
-  })();
-
-  gg.xform.Count = (function(_super) {
-
-    __extends(Count, _super);
-
-    Count.ggpackage = "gg.xform.Count";
-
-    function Count(spec, name) {
-      this.spec = spec;
-      this.name = name != null ? name : "count";
-      Count.__super__.constructor.apply(this, arguments);
-      this.arg = this.args[0];
-      this.val = null;
-    }
-
-    Count.prototype.reset = function() {
-      return this.val = 0;
-    };
-
-    Count.prototype.update = function(row) {
-      return this.val += 1;
-    };
-
-    Count.prototype.value = function() {
-      return this.val;
-    };
-
-    Count.prototype.compute = function(table) {
-      return this.val = table.rows.length;
-    };
-
-    return Count;
-
-  })(gg.xform.Aggregate);
-
-  gg.xform.Sum = (function(_super) {
-
-    __extends(Sum, _super);
-
-    Sum.ggpackage = "gg.xform.Sum";
-
-    function Sum(spec, name) {
-      this.spec = spec;
-      this.name = name != null ? name : "sum";
-      Sum.__super__.constructor.apply(this, arguments);
-      this.arg = this.args[0];
-      this.val = null;
-    }
-
-    Sum.prototype.reset = function() {
-      return this.val = 0;
-    };
-
-    Sum.prototype.update = function(row) {
-      return this.val += row.get(this.arg) || 0;
-    };
-
-    Sum.prototype.value = function() {
-      return this.val;
-    };
-
-    return Sum;
-
-  })(gg.xform.Aggregate);
-
-  gg.xform.Avg = (function(_super) {
-
-    __extends(Avg, _super);
-
-    Avg.ggpackage = "gg.xform.Avg";
-
-    function Avg(spec, name) {
-      this.spec = spec;
-      this.name = name != null ? name : "avg";
-      Avg.__super__.constructor.apply(this, arguments);
-      this.arg = this.args[0];
-      this.sum = null;
-      this.count = null;
-    }
-
-    Avg.prototype.reset = function() {
-      this.sum = 0;
-      return this.count = 0;
-    };
-
-    Avg.prototype.update = function(row) {
-      var y;
-      y = row.get(this.arg);
-      if (_.isNumber(y) && _.isFinite(y)) {
-        this.sum += y;
-        return this.count += 1;
-      }
-    };
-
-    Avg.prototype.value = function() {
-      return this.sum / this.count;
-    };
-
-    return Avg;
-
-  })(gg.xform.Aggregate);
-
-  gg.xform.Max = (function(_super) {
-
-    __extends(Max, _super);
-
-    Max.ggpackage = "gg.xform.Max";
-
-    function Max(spec, name) {
-      this.spec = spec;
-      this.name = name != null ? name : "max";
-      Max.__super__.constructor.apply(this, arguments);
-      this.arg = this.args[0];
-      this.v = null;
-    }
-
-    Max.prototype.reset = function() {
-      return this.v = null;
-    };
-
-    Max.prototype.update = function(row) {
-      var y, _ref;
-      y = row.get(this.arg);
-      if (_.isNumber(y) && _.isFinite(y)) {
-        if ((_ref = this.v) == null) {
-          this.v = y;
-        }
-        return this.v = Math.max(this.v, y);
-      }
-    };
-
-    Max.prototype.value = function() {
-      return this.v;
-    };
-
-    return Max;
-
-  })(gg.xform.Aggregate);
-
-  gg.xform.Min = (function(_super) {
-
-    __extends(Min, _super);
-
-    Min.ggpackage = "gg.xform.Min";
-
-    function Min(spec, name) {
-      this.spec = spec;
-      this.name = name != null ? name : "min";
-      Min.__super__.constructor.apply(this, arguments);
-      this.arg = this.args[0];
-      this.v = null;
-    }
-
-    Min.prototype.reset = function() {
-      return this.v = null;
-    };
-
-    Min.prototype.update = function(row) {
-      var y, _ref;
-      y = row.get(this.arg);
-      if (_.isNumber(y) && _.isFinite(y)) {
-        if ((_ref = this.v) == null) {
-          this.v = y;
-        }
-        return this.v = Math.min(this.v, y);
-      }
-    };
-
-    Min.prototype.value = function() {
-      return this.v;
-    };
-
-    return Min;
-
-  })(gg.xform.Aggregate);
-
-  gg.xform.Quantile = (function(_super) {
-
-    __extends(Quantile, _super);
-
-    Quantile.ggpackage = "gg.xform.Quartile";
-
-    function Quantile(spec, name) {
-      this.spec = spec;
-      this.name = name != null ? name : "quantile";
-      Quantile.__super__.constructor.apply(this, arguments);
-      this.arg = this.args[0];
-      this.vals = [];
-      this.k = this.params.get('k');
-    }
-
-    Quantile.prototype.reset = function() {
-      return this.vals = [];
-    };
-
-    Quantile.prototype.update = function(row) {
-      var y;
-      y = row.get(this.arg);
-      if (_.isNumber(y) && _.isFinite(y)) {
-        return this.vals.push(row.get(this.arg));
-      }
-    };
-
-    Quantile.prototype.value = function() {
-      this.vals.sort(d3.ascending);
-      return d3.quantile(this.vals, this.k);
-    };
-
-    return Quantile;
-
-  })(gg.xform.Aggregate);
 
   gg.xform.EnvPut = (function(_super) {
 
@@ -23705,25 +21392,92 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
     EnvPut.type = "envput";
 
     EnvPut.prototype.parseSpec = function() {
-      EnvPut.__super__.parseSpec.apply(this, arguments);
       return this.params.ensure('pairs', [], {});
     };
 
-    EnvPut.prototype.compute = function(pairtable, params) {
-      var k, md, pairs, ret, v;
-      md = pairtable.getMD();
-      pairs = params.get('pairs');
-      for (k in pairs) {
-        v = pairs[k];
-        md = md.setColumn(k, v);
-      }
-      ret = new gg.data.PairTable(pairtable.getTable(), md);
-      return ret;
+    EnvPut.prototype.compute = function(data, params) {
+      var _this = this;
+      _.each(params.get('pairs'), function(val, key) {
+        _this.log("envput: " + key + " -> " + val);
+        return data.env.put(key, val);
+      });
+      return data;
     };
 
     return EnvPut;
 
   })(gg.core.XForm);
+
+  gg.xform.EnvGet = (function(_super) {
+
+    __extends(EnvGet, _super);
+
+    function EnvGet() {
+      return EnvGet.__super__.constructor.apply(this, arguments);
+    }
+
+    EnvGet.ggpackage = "gg.xform.EnvGet";
+
+    EnvGet.type = "envget";
+
+    EnvGet.prototype.parseSpec = function() {
+      this.params.ensureAll({
+        envkey: [['key', 'envkey']],
+        attr: ['attr', 'key', 'envkey'],
+        "default": [[], null]
+      });
+      if (this.params.get('envkey') == null) {
+        throw Error("" + this.name + ": Need label key and value/value function)");
+      }
+    };
+
+    EnvGet.prototype.compute = function(data, params) {
+      var attr, defaultVal, envkey, val;
+      envkey = params.get('envkey');
+      defaultVal = params.get('default');
+      attr = params.get('attr');
+      if ((envkey != null) && data.env.contains(envkey)) {
+        val = defaultVal;
+        if (data.env.contains(envkey)) {
+          val = data.env.get(envkey);
+        }
+        data.table.addConstColumn(attr, val);
+      }
+      return data;
+    };
+
+    return EnvGet;
+
+  })(gg.core.XForm);
+
+  gg.xform.GroupBy = (function(_super) {
+
+    __extends(GroupBy, _super);
+
+    function GroupBy() {
+      return GroupBy.__super__.constructor.apply(this, arguments);
+    }
+
+    GroupBy.prototype.compute = function(data, params) {
+      gbFunc;
+
+      aggFunc;
+
+      var agg, group, groups, key, _i, _len, _results;
+      groups = gbFunc(table, env, params);
+      _results = [];
+      for (_i = 0, _len = groups.length; _i < _len; _i++) {
+        group = groups[_i];
+        agg = aggFunc(group.table);
+        key = group.key;
+        _results.push(make_a_row);
+      }
+      return _results;
+    };
+
+    return GroupBy;
+
+  })(gg.wf.Exec);
 
   gg.xform.Mapper = (function(_super) {
 
@@ -23735,85 +21489,43 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     Mapper.ggpackage = "gg.xform.Mapper";
 
-    Mapper.log = gg.util.Log.logger(Mapper.ggpackage, 'map');
-
-    Mapper.attrs = ["mapping", "map", "aes", "aesthetic", "aesthetics"];
-
     Mapper.prototype.parseSpec = function() {
+      Mapper.__super__.parseSpec.apply(this, arguments);
       this.params.ensureAll({
-        mapping: [gg.xform.Mapper.attrs, {}],
+        mapping: [["map", "aes", "aesthetics"], this.spec.aes || {}],
         inverse: [[], this.spec.inverse || {}]
       });
-      return Mapper.__super__.parseSpec.apply(this, arguments);
+      return this.log("spec: " + this.params);
     };
 
-    Mapper.prototype.compute = function(pairtable, params) {
-      var functions, mapping, pt, table;
-      table = pairtable.getTable();
-      mapping = params.get('mapping');
-      functions = this.constructor.mappingToFunctions(table, mapping);
-      table = gg.data.Transform.transform(table, functions);
-      pt = new gg.data.PairTable(table, pairtable.getMD());
-      if (__indexOf.call(_.map(functions, function(_arg) {
-        var col, f, t;
-        col = _arg[0], f = _arg[1], t = _arg[2];
-        return col;
-      }), 'group') >= 0) {
-        pt = pt.ensure(['group']);
-      }
-      return pt;
-    };
-
-    Mapper.mappingToFunctions = function(table, mapping) {
-      var allcols, cols, functions, gFuncs, groupable, groupf;
-      this.log("transform: " + (JSON.stringify(mapping)));
-      this.log("table:     " + (JSON.stringify(table.schema.toString())));
-      groupable = null;
-      if ('group' in mapping) {
-        groupable = mapping['group'];
-        if (!_.isObject(groupable)) {
-          groupable = {};
-        }
-        mapping = _.omit(mapping, 'group');
-      } else {
-        allcols = _.keys(mapping);
-        cols = _.filter(allcols, function(c) {
-          return gg.core.Aes.groupable(c);
-        });
-        if (cols.length > 0) {
-          groupable = _.pick(mapping, cols);
-        }
-      }
-      this.log("groupable: " + (JSON.stringify(groupable)));
-      functions = _.mappingToFunctions(table, mapping);
-      if (groupable != null) {
-        gFuncs = _.mappingToFunctions(table, groupable);
-        groupf = (function(gf) {
-          return function(row, idx) {
-            return _.o2map(gf, function(_arg) {
-              var col, f, type;
-              col = _arg[0], f = _arg[1], type = _arg[2];
-              return [col, f(row, idx)];
-            });
-          };
-        })(gFuncs);
-        functions.push(['group', groupf, gg.data.Schema.object]);
-      }
-      return functions;
+    Mapper.prototype.compute = function(data, params) {
+      var env, functions, table;
+      table = data.table;
+      env = data.env;
+      this.log("transform: " + (JSON.stringify(params.get('mapping'))));
+      this.log("table:     " + (JSON.stringify(table.colNames())));
+      this.log(table.clone());
+      functions = _.mappingToFunctions(table, params.get('mapping'));
+      this.log("functions: " + (JSON.stringify(functions)));
+      table = table.transform(functions, true);
+      data.table = table;
+      return data;
     };
 
     Mapper.fromSpec = function(spec) {
-      var inverse, mapping;
+      var attrs, inverse, mapping;
       spec = _.clone(spec);
-      mapping = _.findGoodAttr(spec, gg.xform.Mapper.attrs, null);
+      attrs = ["mapping", "map", "aes", "aesthetic", "aesthetics"];
+      mapping = _.findGoodAttr(spec, attrs, null);
       this.log("fromSpec: " + (JSON.stringify(mapping)));
       if (!((mapping != null) && _.size(mapping) > 0)) {
         return null;
       }
       inverse = spec.inverse;
       if (spec.inverse == null) {
-        inverse = _.o2map(mapping, function(v, k) {
-          return [v, k];
+        inverse = {};
+        _.each(mapping, function(val, key) {
+          return inverse[val] = key;
         });
       }
       spec.params = {
@@ -23825,7 +21537,27 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     return Mapper;
 
-  })(gg.wf.SyncExec);
+  })(gg.core.XForm);
+
+  gg.xform.Query = (function(_super) {
+
+    __extends(Query, _super);
+
+    function Query() {
+      return Query.__super__.constructor.apply(this, arguments);
+    }
+
+    Query.ggpackage = "gg.xform.Query";
+
+    Query.fromSpec = function(g, spec) {
+      var filter, unnest;
+      unnest = spec.unnest;
+      return filter = spec.filter;
+    };
+
+    return Query;
+
+  })(gg.core.XForm);
 
   gg.xform.ScalesSchema = (function(_super) {
 
@@ -23837,38 +21569,37 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     ScalesSchema.ggpackage = "gg.xform.ScalesSchema";
 
-    ScalesSchema.prototype.compute = function(pairtable, params) {
-      var log, md, posMapping, scaleset, schema, table;
-      pairtable = this.ensureScales(pairtable, params, this.log);
-      table = pairtable.getTable();
-      schema = table.schema;
-      md = pairtable.getMD();
-      scaleset = md.get(0, 'scales');
-      posMapping = md.get(0, 'posMapping');
+    ScalesSchema.prototype.compute = function(data, params) {
+      var env, log, posMapping, scaleset, table;
+      table = data.table;
+      env = data.env;
+      scaleset = this.scales(data, params);
+      posMapping = env.get('posMapping');
       log = this.log;
-      _.each(table.cols(), function(col) {
-        var scale, scaletype, scaletypes, tabletype;
-        tabletype = schema.type(col);
-        scaletypes = scaleset.types(col, posMapping);
-        if (scaletypes.length === 0) {
-          scale = scaleset.scale(col, tabletype, posMapping);
-          return log("settype: " + col + ":" + tabletype + " unknown.  create: " + (scale.toString()));
-        } else if (scaletypes.length === 1) {
-          scaletype = scaletypes[0];
-          if (scaletype !== gg.data.Schema.unknown) {
-            if (tabletype >= scaletype) {
-              log("settype: " + col + "\t" + scaletype + " from " + tabletype);
-              return table.schema.setType(col, scaletype);
+      _.each(table.colNames(), function(attr) {
+        var scale, stype, tabletype, types;
+        tabletype = table.schema.type(attr);
+        types = scaleset.types(attr, posMapping);
+        if (types.length === 0) {
+          scale = scaleset.scale(attr, tabletype, posMapping);
+          log("settype: " + attr + ":" + tabletype + " unknown.  create: " + (scale.toString()));
+          return types = [scale.type];
+        } else if (types.length === 1) {
+          stype = types[0];
+          if (stype !== gg.data.Schema.unknown) {
+            if (tabletype >= stype) {
+              log("settype: " + attr + "\t" + stype);
+              return table.schema.setType(attr, stype);
             } else {
-              log(table.getColumn(col).slice(0, 10));
-              throw Error("Upcast " + col + ": " + tabletype + "->" + scaletype);
+              log(table.getColumn(attr).slice(0, 10));
+              throw Error("Upcast " + attr + ": " + tabletype + "->" + stype);
             }
           }
-        } else {
-          throw Error("" + col + " has >1 types in scaleset: " + scaletypes);
+        } else if (types.length > 1) {
+          throw Error("" + attr + " has >1 types in scaleset: " + types);
         }
       });
-      return pairtable;
+      return data;
     };
 
     return ScalesSchema;
@@ -23892,16 +21623,14 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    ScalesApply.prototype.compute = function(pairtable, params) {
-      var md, posMapping, scales, table;
-      pairtable = this.ensureScales(pairtable, params, this.log);
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      posMapping = md.get(0, 'posMapping');
+    ScalesApply.prototype.compute = function(data, params) {
+      var env, scales, table;
+      table = data.table;
+      env = data.env;
       this.log("table has " + (table.nrows()) + " rows");
-      table = scales.apply(table, posMapping);
-      return new gg.data.PairTable(table, md);
+      scales = this.scales(data, params);
+      data.table = scales.apply(table, env.get('posMapping'));
+      return data;
     };
 
     return ScalesApply;
@@ -23925,14 +21654,13 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    ScalesInvert.prototype.compute = function(pairtable, params) {
-      var md, posMapping, scales, table;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      posMapping = md.get(0, 'posMapping');
-      table = scales.invert(table, posMapping);
-      return new gg.data.PairTable(table, md);
+    ScalesInvert.prototype.compute = function(data, params) {
+      var env, scales, table;
+      table = data.table;
+      env = data.env;
+      scales = this.scales(data, params);
+      data.table = scales.invert(table, env.get('posMapping'));
+      return data;
     };
 
     return ScalesInvert;
@@ -23956,14 +21684,17 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
       });
     };
 
-    ScalesFilter.prototype.compute = function(pairtable, params) {
-      var md, posMapping, scales, table;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      posMapping = md.get(0, 'posMapping');
-      table = scales.filter(table, posMapping);
-      return new gg.data.PairTable(table, md);
+    ScalesFilter.prototype.compute = function(data, params) {
+      var env, nrows, scales, table;
+      table = data.table;
+      env = data.env;
+      this.log("table has " + (table.nrows()) + " rows");
+      nrows = table.nrows();
+      scales = this.scales(data, params);
+      this.log(scales.toString());
+      data.table = scales.filter(table, env.get('posMapping'));
+      this.log("filtered " + (nrows - table.nrows()) + " rows");
+      return data;
     };
 
     return ScalesFilter;
@@ -23980,26 +21711,85 @@ var gg = window.gg = {'coord':{},'core':{},'data':{},'facet':{'base':{},'grid':{
 
     ScalesValidate.ggpackage = "gg.xform.ScalesValidate";
 
-    ScalesValidate.prototype.compute = function(pairtable, params) {
-      var col, md, posMapping, scales, stypes, table, _i, _len, _ref;
-      table = pairtable.getTable();
-      md = pairtable.getMD();
-      scales = md.get(0, 'scales');
-      posMapping = md.get(0, 'posMapping');
-      _ref = scales.aesthetics();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        col = _ref[_i];
-        stypes = scales.types(col, posMapping);
+    ScalesValidate.prototype.compute = function(data, params) {
+      var env, scaleset, table;
+      table = data.table;
+      env = data.env;
+      scaleset = this.scales(data, params);
+      _.each(scaleset.aesthetics(), function(aes) {
+        var stypes;
+        stypes = scaleset.types(aes);
         if (stypes.length > 1) {
-          throw Error("Layer scaleset " + col + " has >1 types: " + stypes);
+          throw Error("Layer scaleset " + aes + " has >1 types: " + stypes);
         }
-      }
-      return pairtable;
+      });
+      return data;
     };
 
     return ScalesValidate;
 
   })(gg.core.XForm);
+
+  gg.xform.Split = (function() {
+
+    function Split() {}
+
+    Split.createNode = function(name, gbspec) {
+      var node;
+      console.log([name, gbspec]);
+      node = _.isString(gbspec) ? this.byColumns(name, [gbspec]) : _.isFunction(gbspec) ? this.byFunction(name, gbspec) : _.isArray(gbspec) && gbspec.length > 0 ? (_.isString(gbspec[0]) ? this.fold(name, gbspec) : void 0, {
+        "else": (function() {
+          throw Error("Faceting by transformations not implemented yet");
+        })()
+      }) : void 0;
+      return node;
+    };
+
+    Split.byColumns = function(name, col) {
+      return new gg.wf.PartitionCols({
+        name: name,
+        params: {
+          col: col
+        }
+      });
+    };
+
+    Split.byFunction = function(name, f) {
+      return new gg.wf.Partition({
+        name: name,
+        params: {
+          f: f
+        }
+      });
+    };
+
+    Split.fold = function(name, cols) {
+      var f;
+      if (!(cols.length === 0 || _.isString(cols[0]))) {
+        throw Error();
+      }
+      f = function(table) {
+        return _.map(cols, function(col) {
+          var newtable;
+          newtable = table.cloneDeep();
+          newtable.addColumn(name, table.getColumn(col));
+          return {
+            key: col,
+            table: newtable
+          };
+        });
+      };
+      return new gg.wf.Split({
+        name: name,
+        params: {
+          f: f
+        }
+      });
+    };
+
+    return Split;
+
+  })();
 
 }).call(this);
 

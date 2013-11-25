@@ -3,7 +3,9 @@
   //get chart parameters with whisker
   var params = {{{ chartParams }}};
   
+  d3.select( "#" + params.dom ).append("span");
+  
   var plot = gg( params.spec );
-  plot.render( d3.select( params.dom ) );
+  plot.render( d3.select( "#" + params.dom ) );
 })();
 </script>

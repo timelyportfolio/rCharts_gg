@@ -1,0 +1,125 @@
+<!doctype HTML>
+<meta charset = 'utf-8'>
+<html>
+  <head>
+    <link rel='stylesheet' href='./css/gg.css'>
+    
+    <script src='./js/d3.v3.js' type='text/javascript'></script>
+    <script src='http://sirrice.github.io/gg/js/gg.js' type='text/javascript'></script>
+    <script src='./js/lodash.js' type='text/javascript'></script>
+    
+    <style>
+    .rChart {
+      display: block;
+      margin-left: auto; 
+      margin-right: auto;
+      width: 800px;
+      height: 400px;
+    }  
+    </style>
+    
+  </head>
+  <body>
+    <div id='chart1da015a758e9' class='rChart rCharts_gg'></div>  
+    
+    <script>
+(function(){
+  //get chart parameters with whisker
+  var params = {
+ "dom": "chart1da015a758e9",
+"width":    800,
+"height":    400,
+"spec": {
+ "layers": [{
+ "geom": "rect",
+"stat": "bin",
+"aes": {
+ "group": {
+ "opacity":    0.5,
+"color": "name" 
+} 
+} 
+}],
+"aes": {
+ "x": "{new Date(x)}",
+"y": "{+y}" 
+},
+"facets": {
+ "y": "name",
+"type": "wrap" 
+},
+"scales": {
+ "y": "log",
+"opacity": "identity" 
+},
+"data": [
+ {
+ "x": "9-1-2010",
+"y":      0,
+"name": "sample name" 
+},
+{
+ "x": "9-2-2010",
+"y":     10,
+"name": "sample name" 
+},
+{
+ "x": "9-3-2010",
+"y":     20,
+"name": "sample name" 
+},
+{
+ "x": "9-4-2010",
+"y":     30,
+"name": "sample name" 
+},
+{
+ "x": "9-5-2010",
+"y":     40,
+"name": "sample name" 
+},
+{
+ "x": "9-6-2010",
+"y":     50,
+"name": "sample name" 
+},
+{
+ "x": "9-7-2010",
+"y":     60,
+"name": "sample name" 
+},
+{
+ "x": "9-8-2010",
+"y":     70,
+"name": "sample name" 
+},
+{
+ "x": "9-9-2010",
+"y":     80,
+"name": "sample name" 
+},
+{
+ "x": "9-10-2010",
+"y":     90,
+"name": "sample name" 
+} 
+],
+"opts": {
+ "width":    900,
+"height":    700,
+"title": "Custom plot",
+"minimal": true 
+} 
+},
+"id": "chart1da015a758e9" 
+};
+  
+  d3.select( "#" + params.dom ).append("span");
+  
+  var plot = gg( params.spec );
+  plot.render( d3.select( "#" + params.dom ) );
+})();
+</script>
+    
+  </body>
+</html>
