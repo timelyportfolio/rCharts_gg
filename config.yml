@@ -1,9 +1,11 @@
 gg:
-  css: [css/gg.css]
-  jshead: [js/d3.v3.js,js/gg.js,js/lodash.js]
+  css: [./css/gg.css]
+  jshead: [./js/d3.v3.js,./js/gg.js,./js/lodash.js]
   cdn:
     css:
-      - "http://timelyportfolio.github.io/rCharts_gg/css/gg.css"
+      - "./css/gg.css"
     jshead: 
-      - "http://d3js.org/d3.v3.min.js"
-      - "http://timelyportfolio.github.io/rCharts_gg/js/gg.js"
+      - "./js/d3.v3.js"
+      - "./js/gg.js"
+      - "./js/lodash.js"
+

@@ -2,6 +2,8 @@ require(rCharts)
 
 path = getwd()
 
+
+#replicate example from editor.html
 g1 <- rCharts$new()
 g1$setLib(path)
 g1$set(
@@ -31,3 +33,19 @@ g1$set(
   )
 )
 g1
+
+
+# do a custom implementation of geom_point
+g2 <- rCharts$new()
+g2$setLib(path)
+g2$set( spec = list(
+    layers = list(
+      list(
+        geom = "point",
+        aes = list( x = "x", y = "y", group= list(color= "black") )
+      )
+    ),
+    data = list( x = 1:10, y = 1:10 )
+  )
+)
+g2
