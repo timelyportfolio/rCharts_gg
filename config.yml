@@ -1,9 +1,9 @@
-d3_horizon:
-  css: [css/sankey.css]
-  jshead: [js/d3.v3.js,js/sankey.js]
+gg:
+  css: [css/gg.css]
+  jshead: [js/gg.js]
   cdn:
     css:
-      - "http://timelyportfolio.github.io/rCharts_d3_sankey/css/sankey.css"
+      - "http://timelyportfolio.github.io/rCharts_gg/css/gg.css"
     jshead: 
       - "http://d3js.org/d3.v3.min.js"
-      - "http://timelyportfolio.github.io/rCharts_d3_sankey/js/sankey.js"
+      - "http://timelyportfolio.github.io/rCharts_gg/js/gg.js"
