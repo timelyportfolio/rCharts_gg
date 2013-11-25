@@ -33,6 +33,7 @@ g1$set(
   )
 )
 g1
+g1$save("editor_test.html", cdn = T)
 
 
 # do a custom implementation of geom_point
@@ -42,10 +43,15 @@ g2$set( spec = list(
     layers = list(
       list(
         geom = "point",
-        aes = list( x = "x", y = "y", group= list(color= "black") )
+        aes = list( x = "x", y = "y" )
+      ),
+      list(
+        geom = "line",
+        aes = list( x = "x", y = "y" )
       )
     ),
-    data = list( x = 1:10, y = 1:10 )
+    data = lapply(1:10,function(i) {return( list(x = i, y = i ))})
   )
 )
 g2
+g2$save("dottest.html", cdn = T)

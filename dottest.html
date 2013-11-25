@@ -20,13 +20,13 @@
     
   </head>
   <body>
-    <div id='chart1da06b43f39' class='rChart rCharts_gg'></div>  
+    <div id='chart1da04d2a2e44' class='rChart rCharts_gg'></div>  
     
     <script>
 (function(){
   //get chart parameters with whisker
   var params = {
- "dom": "chart1da06b43f39",
+ "dom": "chart1da04d2a2e44",
 "width":    800,
 "height":    400,
 "spec": {
@@ -35,10 +35,14 @@
  "geom": "point",
 "aes": {
  "x": "x",
-"y": "y",
-"group": {
- "color": "black" 
+"y": "y" 
 } 
+},
+{
+ "geom": "line",
+"aes": {
+ "x": "x",
+"y": "y" 
 } 
 } 
 ],
@@ -85,7 +89,7 @@
 } 
 ] 
 },
-"id": "chart1da06b43f39" 
+"id": "chart1da04d2a2e44" 
 };
   
   d3.select( "#" + params.dom ).append("span");
