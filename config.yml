@@ -1,6 +1,6 @@
 gg:
   css: [css/gg.css]
-  jshead: [js/gg.js]
+  jshead: [js/d3.v3.js,js/gg.js]
   cdn:
     css:
       - "http://timelyportfolio.github.io/rCharts_gg/css/gg.css"
